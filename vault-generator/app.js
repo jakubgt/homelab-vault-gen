@@ -157,12 +157,12 @@ function formatCrackTime(entropy) {
     if (years < 100) return Math.round(years) + " years";
     if (years < 10000) return Math.round(years / 100) + " centuries";
     if (years < 1000000) return Math.round(years / 1000) + " millennia";
-    return "Forever";
+    return "Indefinite";
 }
 
 function updateEntropyDisplay(entropy) {
     el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
-    el.crackText.textContent = `Crack: ${formatCrackTime(entropy)}`;
+    el.crackText.textContent = `Crack Time: ${formatCrackTime(entropy)}`;
     
     let strength = "Weak";
     let color = "#dc3545"; // Red
