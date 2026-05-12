@@ -118,7 +118,7 @@
         <div id="result"></div>
         
         <div class="controls">
-            <label>Length: <span id="length-val">24</span></label>
+            <label>Length: <span id="length-val">20</span></label>
             <input type="range" id="length" min="12" max="64" value="20">
         </div>
 
@@ -149,8 +149,35 @@
         const clearTimeSelect = document.getElementById('clear-time');
         const customTimeInput = document.getElementById('custom-time');
 
-        // Character Pool (Excludes shell-breaking quotes/backticks)
+        // Character Pool
         const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>/?|~"; 
+
+        // --- 1. LOAD SAVED PREFERENCES ---
+        
+        // Load Theme
+        const savedTheme = localStorage.getItem('vault_theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-mode');
+            themeBtn.innerText = '☀️';
+        }
+
+        // Load Clear Timer Selection
+        const savedTimerType = localStorage.getItem('vault_timer_type');
+        if (savedTimerType) {
+            clearTimeSelect.value = savedTimerType;
+            if (savedTimerType === 'custom') {
+                customTimeInput.style.display = 'block';
+            }
+        }
+
+        // Load Custom Seconds Value
+        const savedCustomSecs = localStorage.getItem('vault_custom_secs');
+        if (savedCustomSecs) {
+            customTimeInput.value = savedCustomSecs;
+        }
+
+
+        // --- 2. EVENT LISTENERS WITH SAVING ---
 
         // Update length text when sliding
         lengthEl.addEventListener('input', () => {
@@ -160,11 +187,17 @@
         // Theme Toggle Logic
         themeBtn.addEventListener('click', () => {
             document.body.classList.toggle('dark-mode');
-            themeBtn.innerText = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+            const isDark = document.body.classList.contains('dark-mode');
+            themeBtn.innerText = isDark ? '☀️' : '🌙';
+            
+            // Save theme choice
+            localStorage.setItem('vault_theme', isDark ? 'dark' : 'light');
         });
 
-        // Show/Hide Custom Time Input
+        // Show/Hide Custom Time Input and Save Selection
         clearTimeSelect.addEventListener('change', () => {
+            localStorage.setItem('vault_timer_type', clearTimeSelect.value);
+
             if (clearTimeSelect.value === 'custom') {
                 customTimeInput.style.display = 'block';
                 customTimeInput.focus();
@@ -172,6 +205,14 @@
                 customTimeInput.style.display = 'none';
             }
         });
+
+        // Save custom seconds as user types
+        customTimeInput.addEventListener('input', () => {
+            localStorage.setItem('vault_custom_secs', customTimeInput.value);
+        });
+
+
+        // --- 3. GENERATION & COPY LOGIC ---
 
         // Generate Crypto-Secure Password
         function generatePassword() {
