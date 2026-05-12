@@ -59,7 +59,7 @@ You do not need a web server at all to use this securely.
 
 The Web Crypto API works perfectly in this local file:/// context, ensuring maximum offline security.
 
-### Method 2: Docker Compose (Homelab Standard - Recommended)
+### Method 2: Docker Compose 
 The repository includes a hardened NGINX configuration and a `docker-compose.yml` file. This drops all container privileges, mounts the files as read-only, and applies strict security headers.
 
 1. Clone or download the repository.
@@ -84,7 +84,7 @@ Run the built-in HTTP server:
 
 ---
 
-### 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX)
+### 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX) (Homelab Standard - Recommended)
 It is highly recommended to host this on a dedicated, unprivileged LXC container using NGINX to take advantage of the strict CSP headers.
 
 1. Prepare the Environment
