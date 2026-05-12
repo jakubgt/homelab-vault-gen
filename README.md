@@ -25,6 +25,24 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 ---
 
+## 🛡️ Threat Model
+
+To ensure this tool fits your security requirements, please review its intended scope.
+
+### This project PROTECTS against:
+* **Weak PRNGs:** Uses OS-level entropy to eliminate predictable patterns.
+* **Online Leakage:** Your passwords never touch a network or a remote server.
+* **CDN Compromise:** Zero external dependencies means no "supply chain" script injections.
+* **Interception:** Since all logic is local, secrets cannot be sniffed in transit.
+
+### This project does NOT protect against:
+* **Compromised Browsers:** A hijacked browser can see everything you generate.
+* **OS-Level Malware:** Keyloggers or screen-recorders bypass all web-app security.
+* **Clipboard History:** Clipboard auto-clear is "best-effort"; OS managers may still retain copies.
+* **Malicious Extensions:** Some browser extensions can read the data on your screen.
+
+---
+
 ## 🖥️ Quick Start (Docker, Windows, Mac)
 
 Because this application relies entirely on client-side code with zero external dependencies, it is incredibly easy to deploy.
