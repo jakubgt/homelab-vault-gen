@@ -73,13 +73,13 @@ body {
     user-select: all;
 }
 
-/* Tighter, Aligned Length Section */
+/* Length Section */
 .length-header {
     display: flex;
     justify-content: space-between;
-    align-items: center; /* Improved vertical alignment */
+    align-items: center;
     margin-bottom: 6px;
-    padding: 0 4px;      /* Slight indent from the container edge */
+    padding: 0 4px;
 }
 
 #length-label {
@@ -100,10 +100,9 @@ body {
     font-weight: bold;
     font-size: 14px;
     outline: none;
-    appearance: textfield; /* Hides spin arrows in Firefox */
+    appearance: textfield; 
 }
 
-/* Hides spin arrows in Chrome/Safari/Edge */
 #length-num::-webkit-inner-spin-button, 
 #length-num::-webkit-outer-spin-button { 
     -webkit-appearance: none; 
@@ -132,15 +131,36 @@ body {
 
 /* UI Elements */
 .entropy-meter { margin-bottom: 15px; }
-#entropy-text { font-size: 14px; font-weight: bold; }
-.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.entropy-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: var(--text-color);
+}
+.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
 #entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
 
 .tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 15px; }
-.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; }
+.tab-btn { flex: 1; background: none; border: none; padding: 10px 5px; color: var(--text-color); cursor: pointer; opacity: 0.6; font-size: 14px; }
 .tab-btn.active { opacity: 1; border-bottom: 2px solid var(--accent); font-weight: bold; }
 
-.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; margin-bottom: 10px; }
+.setting-row { margin-bottom: 10px; font-size: 14px; }
+
+.sym-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    margin-top: 5px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: monospace;
+}
+
 .action-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; width: 100%; margin-top: 10px; cursor: pointer; font-weight: bold; }
 #copy-btn { background-color: var(--success); }
 
