@@ -16,7 +16,8 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Real-Time Entropy Meter:** Accurately calculates true bit-entropy using the following formula:
   $$H = L \cdot \log_{2}(N)$$
   Where $L$ is length and $N$ is the charset size.
-* **Paranoid Mode & Memory Wiping:** * Blurs the password on-screen until hovered.
+* **Paranoid Mode & Memory Wiping:**
+  * Blurs the password on-screen until hovered.
   * Auto-clears the DOM if you switch browser tabs or close the window.
   * Disables all `localStorage` saving.
 * **Strict Content Security Policy (CSP):** The application is strictly separated into HTML, CSS, and JS files, allowing web servers to ban all `'unsafe-inline'` executions.
@@ -44,7 +45,7 @@ The repository includes a hardened NGINX configuration and a `docker-compose.yml
 2. Navigate to the folder in your terminal.
 3. Run:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 4. Access the generator at http://localhost (or your server's IP)
 
@@ -87,7 +88,7 @@ echo "Deployment complete!"
 ```
 
 ### 3. Lock Down Permissions
-Ensure the web server can only read the file, never modify it:
+Ensure the web server can only read the files, never modify it:
 ```bash
 chown -R www-data:www-data /var/www/html
 find /var/www/html -type d -exec chmod 555 {} \;
@@ -121,9 +122,7 @@ ufw default allow outgoing
 ufw allow 80/tcp
 ufw enable
 ```
-Pro-Tip:
-
-💡 LXC/Proxmox Note: If running in an unprivileged container, the included Docker config uses network_mode: host. This ensures the web server can bind to the network correctly without complex bridge configurations..
+> 💡 **LXC/Proxmox Note:** If running in an unprivileged container, the included Docker config uses `network_mode: host`. This ensures the web server can bind to the network correctly without complex bridge configurations.
 
 ## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
