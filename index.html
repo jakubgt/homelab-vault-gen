@@ -5,21 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Homelab Vault Generator</title>
     <style>
-        /* CSS Variables for Theme Switching */
+        /* Light Mode Colors (Now the Default) */
         :root {
-            --bg-color: #121212;
-            --container-bg: #1e1e1e;
-            --text-color: #e0e0e0;
-            --input-bg: #2d2d2d;
-            --border-color: #444;
-        }
-        /* Light Mode Colors */
-        body.light-mode {
             --bg-color: #f4f4f9;
             --container-bg: #ffffff;
             --text-color: #333333;
             --input-bg: #eeeeee;
             --border-color: #cccccc;
+        }
+        /* Dark Mode Colors */
+        body.dark-mode {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --input-bg: #2d2d2d;
+            --border-color: #444;
         }
         
         body {
@@ -37,11 +37,14 @@
             background-color: var(--container-bg);
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             width: 100%;
             max-width: 400px;
             text-align: center;
             position: relative;
+        }
+        body.dark-mode .container {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         /* Theme Toggle Button */
         .theme-toggle {
@@ -75,7 +78,11 @@
             align-items: center;
             margin-bottom: 15px;
         }
-        select {
+        .time-inputs {
+            display: flex;
+            gap: 10px;
+        }
+        select, input[type="number"] {
             padding: 6px;
             border-radius: 5px;
             background-color: var(--input-bg);
@@ -106,7 +113,7 @@
 </head>
 <body>
     <div class="container">
-        <button class="theme-toggle" id="theme-btn" title="Toggle Theme">☀️</button>
+        <button class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
         <h2>Secure Generator</h2>
         <div id="result"></div>
         
@@ -117,10 +124,15 @@
 
         <div class="setting-row">
             <label for="clear-time">Auto-Clear Clipboard:</label>
-            <select id="clear-time">
-                <option value="60000">60 Seconds</option>
-                <option value="300000">5 Minutes</option>
-            </select>
+            <div class="time-inputs">
+                <input type="number" id="custom-time" min="1" placeholder="Secs" style="display: none; width: 60px;">
+                <select id="clear-time">
+                    <option value="30000">30 Seconds</option>
+                    <option value="60000" selected>60 Seconds</option>
+                    <option value="300000">5 Minutes</option>
+                    <option value="custom">Custom...</option>
+                </select>
+            </div>
         </div>
 
         <button class="action-btn" id="generate-btn">Generate Password</button>
@@ -135,6 +147,7 @@
         const copyBtn = document.getElementById('copy-btn');
         const themeBtn = document.getElementById('theme-btn');
         const clearTimeSelect = document.getElementById('clear-time');
+        const customTimeInput = document.getElementById('custom-time');
 
         // Character Pool (Excludes shell-breaking quotes/backticks)
         const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>/?|~"; 
@@ -146,8 +159,18 @@
 
         // Theme Toggle Logic
         themeBtn.addEventListener('click', () => {
-            document.body.classList.toggle('light-mode');
-            themeBtn.innerText = document.body.classList.contains('light-mode') ? '🌙' : '☀️';
+            document.body.classList.toggle('dark-mode');
+            themeBtn.innerText = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+        });
+
+        // Show/Hide Custom Time Input
+        clearTimeSelect.addEventListener('change', () => {
+            if (clearTimeSelect.value === 'custom') {
+                customTimeInput.style.display = 'block';
+                customTimeInput.focus();
+            } else {
+                customTimeInput.style.display = 'none';
+            }
         });
 
         // Generate Crypto-Secure Password
@@ -164,14 +187,28 @@
             copyBtn.innerText = "Copy Password"; 
         }
 
-        // Copy with selectable Auto-Clear
+        // Copy with selectable/custom Auto-Clear
         let clearTimer;
         copyBtn.addEventListener('click', () => {
             const pwd = resultEl.innerText;
             if (!pwd) return;
 
-            const delay = parseInt(clearTimeSelect.value, 10);
-            const timeLabel = delay === 60000 ? "60s" : "5m";
+            let delay;
+            let timeLabel;
+
+            // Handle custom time logic
+            if (clearTimeSelect.value === 'custom') {
+                const customSecs = parseInt(customTimeInput.value, 10);
+                if (isNaN(customSecs) || customSecs <= 0) {
+                    alert("Please enter a valid number of seconds.");
+                    return;
+                }
+                delay = customSecs * 1000;
+                timeLabel = `${customSecs}s`;
+            } else {
+                delay = parseInt(clearTimeSelect.value, 10);
+                timeLabel = delay === 30000 ? "30s" : delay === 60000 ? "60s" : "5m";
+            }
 
             navigator.clipboard.writeText(pwd).then(() => {
                 copyBtn.innerText = `Copied! (Clears in ${timeLabel})`;
