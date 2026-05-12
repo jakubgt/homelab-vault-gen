@@ -53,9 +53,15 @@ find /var/www/html -type f -exec chmod 444 {} \;
 ### 4. Hardening (Optional but Recommended)
 For maximum security, configure NGINX to drop its version number, add security headers, and enforce a strict Content Security Policy (CSP) tailored for an inline single-file app:
 ```bash
++# Hide NGINX version number
++sed -i 's/# server_tokens off;/server_tokens off;/g' /etc/nginx/nginx.conf
++
++# Add security headers and CSP
 echo 'add_header X-Frame-Options "DENY";' > /etc/nginx/conf.d/security.conf
 echo 'add_header X-Content-Type-Options "nosniff";' >> /etc/nginx/conf.d/security.conf
 echo 'add_header X-XSS-Protection "1; mode=block";' >> /etc/nginx/conf.d/security.conf
++echo "add_header Content-Security-Policy \"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';\";" >> /etc/nginx/conf.d/security.conf
+
 nginx -t && systemctl restart nginx
 ```
 
