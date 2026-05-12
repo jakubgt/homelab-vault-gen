@@ -2,7 +2,7 @@ const el = {
     result: document.getElementById('result'),
     resultContainer: document.getElementById('result-container'),
     length: document.getElementById('length'),
-    lengthVal: document.getElementById('length-val'),
+    lengthNum: document.getElementById('length-num'), // Manual input field
     lengthLabel: document.getElementById('length-label'),
     generateBtn: document.getElementById('generate-btn'),
     copyBtn: document.getElementById('copy-btn'),
@@ -27,13 +27,30 @@ const CHARS = {
 let isPassphrase = false;
 let clearTimer;
 
+// --- DUAL-SYNC LENGTH LOGIC ---
+
+function syncLength(e) {
+    let val = parseInt(e.target.value);
+    
+    // Bounds checking
+    const min = parseInt(el.length.min);
+    const max = parseInt(el.length.max);
+    
+    if (isNaN(val)) return;
+    if (val < min) val = min;
+    if (val > max) val = max;
+
+    el.length.value = val;
+    el.lengthNum.value = val;
+    generate();
+}
+
 // --- THEME & STORAGE LOGIC ---
 
 function toggleTheme() {
     const isDark = document.body.classList.toggle('dark-mode');
     el.themeBtn.textContent = isDark ? '☀️' : '🌙';
     
-    // Only save if Paranoid Mode is off and storage is accessible
     if (!document.getElementById('opt-paranoid').checked) {
         try {
             localStorage.setItem('vault_theme', isDark ? 'dark' : 'light');
@@ -165,10 +182,14 @@ function calculateEntropy() {
 
 // --- INITIALIZATION & LISTENERS ---
 
-el.themeBtn.addEventListener('click', toggleTheme); // Added listener
+el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
-el.length.addEventListener('input', () => { el.lengthVal.textContent = el.length.value; generate(); });
+
+// Sync both inputs 
+el.length.addEventListener('input', syncLength);
+el.lengthNum.addEventListener('input', syncLength);
+
 el.tabPwd.addEventListener('click', () => { isPassphrase = false; updateUI(); });
 el.tabPass.addEventListener('click', () => { isPassphrase = true; updateUI(); });
 
@@ -178,8 +199,16 @@ function updateUI() {
     el.pwdOpts.classList.toggle('hidden', isPassphrase);
     el.passOpts.classList.toggle('hidden', !isPassphrase);
     el.lengthLabel.textContent = isPassphrase ? "Words" : "Length";
-    el.length.min = isPassphrase ? 3 : 8;
-    el.length.max = isPassphrase ? 12 : 64;
+    
+    // Set min/max based on mode 
+    if (isPassphrase) {
+        el.length.min = el.lengthNum.min = 3;
+        el.length.max = el.lengthNum.max = 20;
+        if (el.length.value > 20) el.length.value = el.lengthNum.value = 10;
+    } else {
+        el.length.min = el.lengthNum.min = 4;
+        el.length.max = el.lengthNum.max = 128;
+    }
     generate();
 }
 
@@ -188,7 +217,6 @@ document.getElementById('opt-paranoid').addEventListener('change', (e) => {
     el.paranoidOverlay.classList.toggle('hidden', !e.target.checked);
 });
 
-// Final check to see if we should reveal text on blur for Paranoid Mode
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && document.getElementById('opt-paranoid').checked) {
         el.result.textContent = "";
