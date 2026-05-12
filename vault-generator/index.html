@@ -14,49 +14,45 @@
         <button class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
         <h2>Secure Generator</h2>
         
+        <div class="tabs">
+            <button id="tab-pwd" class="tab-btn active">Password</button>
+            <button id="tab-pass" class="tab-btn">Passphrase</button>
+            <button id="tab-user" class="tab-btn">Username</button>
+        </div>
+        
         <div id="result-container" title="Click to copy">
             <div id="result"></div>
             <div id="paranoid-overlay" class="hidden">Hover to Reveal</div>
         </div>
         
-        <div class="entropy-meter">
+        <div class="stats-row">
             <span id="entropy-text">Entropy: 0 bits</span>
-            <div class="entropy-bar-container">
-                <div id="entropy-bar"></div>
-            </div>
+            <span id="strength-text" class="strength-weak">Strength: Weak</span>
+            <span id="crack-text">Crack Time: Instant</span>
         </div>
-
-        <div class="tabs">
-            <button id="tab-pwd" class="tab-btn active">Password</button>
-            <button id="tab-pass" class="tab-btn">Passphrase</button>
+        <div class="entropy-bar-container">
+            <div id="entropy-bar"></div>
         </div>
 
         <div class="controls">
-            <div class="length-header">
+            <div class="length-header" id="length-container">
                 <span id="length-label">Length</span>
-                <input type="number" id="length-num" min="4" max="128" value="20">
+                <input type="number" id="length-num" min="4" max="128" value="24">
             </div>
-            <input type="range" id="length" min="4" max="128" value="20" class="full-slider">
+            <input type="range" id="length" min="4" max="128" value="24" class="full-slider" id="length-slider">
 
             <div id="pwd-options" class="options-grid">
                 <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
                 <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
                 <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
+                <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous (lI1O0)</label>
                 <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
-                
-                <div class="full-width-opt">
-                    <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous</label>
-                    <div class="opt-desc">Excludes visually similar characters (l, I, 1, O, 0)</div>
-                </div>
-
-                <div class="full-width-opt">
-                    <label><input type="checkbox" id="opt-safe" checked> Terminal / YAML Safe</label>
-                    <div class="opt-desc">Excludes quotes, brackets, and script-breaking symbols</div>
-                </div>
+                <label><input type="checkbox" id="opt-safe"> Safe Only Characters</label>
+                <input type="text" id="sym-input" class="full-width-input" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
             </div>
 
             <div id="pass-options" class="options-grid hidden">
-                <label><input type="checkbox" id="opt-pass-caps"> Capitalize Words</label>
+                <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize Words</label>
                 <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
                 <label class="full-width-opt">Separator: 
                     <select id="opt-pass-sep" style="margin-left: 10px; padding: 2px;">
@@ -64,6 +60,18 @@
                         <option value="_">Underscore (_)</option>
                         <option value=".">Period (.)</option>
                         <option value=" ">Space</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="user-options" class="options-grid hidden">
+                <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
+                <label class="full-width-opt">Separator: 
+                    <select id="opt-user-sep" style="margin-left: 10px; padding: 2px;">
+                        <option value="">None</option>
+                        <option value="-">Hyphen (-)</option>
+                        <option value="_">Underscore (_)</option>
+                        <option value=".">Period (.)</option>
                     </select>
                 </label>
             </div>
