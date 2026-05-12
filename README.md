@@ -12,7 +12,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Maximum Entropy:** Defaults to 20 characters and features an expanded 29-character symbol pool (`!@#$%^&*()-_=+[]{};:,.<>/?|~`).
 * **Zero Dependencies:** No React, no Webpack, no external CDNs, and no telemetry. Just one clean `index.html` file containing HTML, CSS, and JS.
 * **Air-Gap Ready:** Runs 100% client-side in the browser.
-* **Modern UI:** Clean dark mode interface.
+* **Modern UI:** Clean dark mode interface. (White mode with toggle coming soon!)
 * **1-Click Copy:** Native clipboard API integration with visual feedback.
 
 ---
@@ -30,11 +30,9 @@ apt install nginx git ufw -y
 
 ### 2. Deploy the Code
 ```bash
-# 2. Deploy the Code
 echo "Clearing old files and pulling your custom generator..."
 rm -rf /var/www/html/*
 
-# Clone your specific repository
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
 # Move the file and clean up
