@@ -73,7 +73,7 @@ body {
     user-select: all;
 }
 
-/* Length Section */
+/* Length Controls */
 .length-header {
     display: flex;
     justify-content: space-between;
@@ -100,7 +100,7 @@ body {
     font-weight: bold;
     font-size: 14px;
     outline: none;
-    appearance: textfield; 
+    appearance: textfield;
 }
 
 #length-num::-webkit-inner-spin-button, 
@@ -131,34 +131,28 @@ body {
 
 /* UI Elements */
 .entropy-meter { margin-bottom: 15px; }
-.entropy-stats {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: var(--text-color);
-}
-.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
+#entropy-text { font-size: 14px; font-weight: bold; }
+.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-top: 5px; }
 #entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
 
 .tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 15px; }
-.tab-btn { flex: 1; background: none; border: none; padding: 10px 5px; color: var(--text-color); cursor: pointer; opacity: 0.6; font-size: 14px; }
+.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; }
 .tab-btn.active { opacity: 1; border-bottom: 2px solid var(--accent); font-weight: bold; }
 
-.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; margin-bottom: 10px; }
-.setting-row { margin-bottom: 10px; font-size: 14px; }
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
 
-.sym-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px;
-    margin-top: 5px;
-    border-radius: 5px;
-    border: 1px solid var(--border-color);
-    background: var(--input-bg);
+/* Option Row Styling */
+.full-width-opt {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+}
+
+.opt-desc {
+    font-size: 12px;
     color: var(--text-color);
-    font-family: monospace;
+    opacity: 0.6;
+    margin-left: 24px;
+    margin-top: 2px;
 }
 
 .action-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; width: 100%; margin-top: 10px; cursor: pointer; font-weight: bold; }
