@@ -11,12 +11,14 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 ## ✨ Features
 
 * **True Cryptographic Security:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias, ensuring perfect uniform distribution of characters.
+* **Username Generation:** Create clean, memorable usernames by securely combining random words from the built-in dictionary, complete with custom separators and optional randomized number suffixes.
 * **Passphrase / Diceware Mode:** Generate highly memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
     * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
-* **Character Class Guarantees:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password.
-* **Real-Time Entropy Meter:** Accurately calculates true bit-entropy using the following formula:
+* **Character Class Guarantees & Custom Symbols:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password. 
+    * Includes a **Custom Symbol Pool** input and a **"Safe Symbols" Toggle** to quickly filter out characters commonly rejected by legacy systems (e.g., brackets, quotes).
+* **Advanced Entropy & Crack-Time Meter:** Accurately calculates true bit-entropy using the following formula:
   $$H = L \cdot \log_{2}(N)$$
-  Where $L$ is length and $N$ is the charset size.
+  Where $L$ is length and $N$ is the charset size. The meter dynamically displays plain-English **Strength Classifications** and estimates **Time to Crack** (based on a modern cracking speed of 100 billion guesses per second).
 * **Paranoid Mode & Memory Wiping:**
     * **Visual Privacy:** Blurs the password on-screen until hovered.
     * **Auto-Clear:** Automatically clears the DOM and resets results if you switch browser tabs, minimize, or close the window.
