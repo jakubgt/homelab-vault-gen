@@ -32,9 +32,9 @@ Because this application relies entirely on client-side code with zero external 
 ### Method 1: Local File Execution (Air-Gapped, easiest)
 You do not need a web server at all to use this securely.
 
-Download the repository folder to your Windows or Mac machine.
-
-Double-click index.html to open it directly in your web browser (Chrome, Edge, Safari, Firefox).
+1. Download the repository folder to your Windows or Mac machine.
+2. Unzip the contents of the repository
+3. Double-click index.html to open it directly in your web browser (Chrome, Edge, Safari, Firefox).
 
 The Web Crypto API works perfectly in this local file:/// context, ensuring maximum offline security.
 
