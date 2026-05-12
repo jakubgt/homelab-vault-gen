@@ -27,6 +27,34 @@ const CHARS = {
 let isPassphrase = false;
 let clearTimer;
 
+// --- THEME & STORAGE LOGIC ---
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    el.themeBtn.textContent = isDark ? '☀️' : '🌙';
+    
+    // Only save if Paranoid Mode is off and storage is accessible
+    if (!document.getElementById('opt-paranoid').checked) {
+        try {
+            localStorage.setItem('vault_theme', isDark ? 'dark' : 'light');
+        } catch (e) {
+            console.warn("Storage blocked in local file mode.");
+        }
+    }
+}
+
+function loadPrefs() {
+    try {
+        const theme = localStorage.getItem('vault_theme');
+        if (theme === 'dark') {
+            document.body.classList.add('dark-mode');
+            el.themeBtn.textContent = '☀️';
+        }
+    } catch (e) {
+        console.warn("Could not load preferences.");
+    }
+}
+
 // --- CORE LOGIC ---
 
 function getSecureRandomInt(max) {
@@ -46,16 +74,32 @@ function generate() {
 function generatePassword() {
     const len = +el.length.value;
     let pool = "";
-    if (document.getElementById('opt-upper').checked) pool += CHARS.upper;
-    if (document.getElementById('opt-lower').checked) pool += CHARS.lower;
-    if (document.getElementById('opt-nums').checked) pool += CHARS.nums;
-    if (document.getElementById('opt-syms').checked) pool += CHARS.syms;
-    if (document.getElementById('opt-ambig').checked) pool = pool.replace(/[lI1O0]/g, "");
+    const activeSets = [];
+
+    if (document.getElementById('opt-upper').checked) { pool += CHARS.upper; activeSets.push(CHARS.upper); }
+    if (document.getElementById('opt-lower').checked) { pool += CHARS.lower; activeSets.push(CHARS.lower); }
+    if (document.getElementById('opt-nums').checked) { pool += CHARS.nums; activeSets.push(CHARS.nums); }
+    if (document.getElementById('opt-syms').checked) { pool += CHARS.syms; activeSets.push(CHARS.syms); }
+    
+    if (document.getElementById('opt-ambig').checked) {
+        pool = pool.replace(/[lI1O0]/g, "");
+    }
 
     if (!pool) { el.result.textContent = "Select a pool!"; return; }
 
     let pwd = "";
-    for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
+    let isValid = false;
+
+    while (!isValid) {
+        pwd = "";
+        for (let i = 0; i < len; i++) {
+            pwd += pool[getSecureRandomInt(pool.length)];
+        }
+        isValid = activeSets.every(set => {
+            const setChars = document.getElementById('opt-ambig').checked ? set.replace(/[lI1O0]/g, "") : set;
+            return pwd.split('').some(char => setChars.includes(char));
+        });
+    }
     el.result.textContent = pwd;
 }
 
@@ -119,7 +163,9 @@ function calculateEntropy() {
     el.entropyBar.style.backgroundColor = entropy > 100 ? "#20c997" : entropy > 60 ? "#ffc107" : "#dc3545";
 }
 
-// --- EVENT LISTENERS ---
+// --- INITIALIZATION & LISTENERS ---
+
+el.themeBtn.addEventListener('click', toggleTheme); // Added listener
 el.generateBtn.addEventListener('click', generate);
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
 el.length.addEventListener('input', () => { el.lengthVal.textContent = el.length.value; generate(); });
@@ -142,4 +188,12 @@ document.getElementById('opt-paranoid').addEventListener('change', (e) => {
     el.paranoidOverlay.classList.toggle('hidden', !e.target.checked);
 });
 
+// Final check to see if we should reveal text on blur for Paranoid Mode
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && document.getElementById('opt-paranoid').checked) {
+        el.result.textContent = "";
+    }
+});
+
+loadPrefs();
 generate();
