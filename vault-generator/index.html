@@ -4,22 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Homelab Vault Generator</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <button class="theme-toggle" id="theme-btn">🌙</button>
+        <button class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
         <h2>Secure Generator</h2>
         
-        <div id="result-container" class="copy-box">
+        <div id="result-container" title="Click to copy">
             <div id="result"></div>
             <div id="paranoid-overlay" class="hidden">Hover to Reveal</div>
         </div>
         
         <div class="entropy-meter">
             <span id="entropy-text">Entropy: 0 bits</span>
-            <div class="entropy-bar-container"><div id="entropy-bar"></div></div>
+            <div class="entropy-bar-container">
+                <div id="entropy-bar"></div>
+            </div>
+            <small class="disclaimer">Clipboard auto-clear is best-effort. OS history may retain copies.</small>
         </div>
 
         <div class="tabs">
@@ -36,16 +41,36 @@
                 <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
                 <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
                 <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
+                <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous (lI1O0)</label>
             </div>
 
             <div id="pass-options" class="options-grid hidden">
-                <label><input type="checkbox" id="opt-pass-caps"> Capitalize</label>
-                <label><input type="checkbox" id="opt-pass-nums"> Numbers</label>
-                <label>Sep: <select id="opt-pass-sep"><option value="-">-</option><option value=".">.</option></select></label>
+                <label><input type="checkbox" id="opt-pass-caps"> Capitalize Words</label>
+                <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
+                <label>Separator: 
+                    <select id="opt-pass-sep">
+                        <option value="-">Hyphen (-)</option>
+                        <option value="_">Underscore (_)</option>
+                        <option value=".">Period (.)</option>
+                        <option value=" ">Space</option>
+                    </select>
+                </label>
+            </div>
+
+            <hr>
+
+            <div class="setting-row">
+                <label><input type="checkbox" id="opt-paranoid"> <strong>Paranoid Mode</strong><br>
+                <small>No saving, clears on blur, hides text</small></label>
             </div>
 
             <div class="setting-row">
-                <label><input type="checkbox" id="opt-paranoid"> <strong>Paranoid Mode</strong></label>
+                <label for="clear-time">Auto-Clear:</label>
+                <select id="clear-time">
+                    <option value="30000">30 Seconds</option>
+                    <option value="60000" selected>60 Seconds</option>
+                    <option value="300000">5 Minutes</option>
+                </select>
             </div>
         </div>
 
