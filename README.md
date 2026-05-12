@@ -1,4 +1,4 @@
-🔐 Homelab Vault: Secure Offline Password Generator
+# 🔐 Homelab Vault: Secure Offline Password Generator
 
 A hyper-secure, single-file offline password generator built specifically for self-hosting in a homelab environment. 
 
@@ -28,9 +28,7 @@ apt update && apt upgrade -y
 apt install nginx git ufw -y
 ```
 
-2. Deploy the Code
-Clear the default NGINX files and drop in the generator:
-# Clear default files
+### 2. Deploy the Code
 ```bash
 # 2. Deploy the Code
 echo "Clearing old files and pulling your custom generator..."
@@ -46,7 +44,7 @@ rm -rf /tmp/passgen
 echo "Deployment complete!"
 ```
 
-3. Lock Down Permissions
+### 3. Lock Down Permissions
 Ensure the web server can only read the file, never modify it:
 ```bash
 chown -R www-data:www-data /var/www/html
@@ -54,7 +52,7 @@ find /var/www/html -type d -exec chmod 555 {} \;
 find /var/www/html -type f -exec chmod 444 {} \;
 ```
 
-4. Hardening (Optional but Recommended)
+### 4. Hardening (Optional but Recommended)
 For maximum security, configure NGINX to drop its version number and add security headers:
 ```bash
 echo 'add_header X-Frame-Options "DENY";' > /etc/nginx/conf.d/security.conf
@@ -63,7 +61,7 @@ echo 'add_header X-XSS-Protection "1; mode=block";' >> /etc/nginx/conf.d/securit
 nginx -t && systemctl restart nginx
 ```
 
-5. Lock down the firewall to only accept web traffic:
+### 5. Lock down the firewall to only accept web traffic:
 ```bash
 ufw default deny incoming
 ufw default allow outgoing
@@ -71,10 +69,10 @@ ufw allow 80/tcp
 ufw enable
 ```
 
-🧠 Why Build This?
+## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use legacy math functions that do not provide cryptographically secure pseudorandom numbers (CSPRNG).
 
 This project strips everything away to leave only the bare essentials: a mathematically sound window.crypto algorithm wired to a simple, indestructible UI. It's the perfect utility to embed in a local network for generating passwords for new Docker containers, VMs, or databases.
 
-📄 License
+## 📄 License
 This project is open-source and available under the MIT License. Feel free to fork, modify, and host it in your own labs!
