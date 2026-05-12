@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   vault-gen:
     image: nginx:alpine
@@ -13,6 +12,11 @@ services:
     cpus: "0.5"
     ports:
       - "8080:80"
+    # Added tmpfs to allow NGINX to write temp files in a read-only environment
+    tmpfs:
+      - /var/cache/nginx:mode=777
+      - /var/run:mode=777
+      - /tmp:mode=777
     volumes:
       - ./index.html:/usr/share/nginx/html/index.html:ro
       - ./styles.css:/usr/share/nginx/html/styles.css:ro
