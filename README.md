@@ -23,6 +23,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
     * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains.
 * **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
+* **Precision Length Controls:** Features a dual-sync manual numeric input and full-width slider, allowing for exact character or word counts from 4 to 128.
 
 ---
 
