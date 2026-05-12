@@ -4,27 +4,34 @@ const el = {
     length: document.getElementById('length'),
     lengthNum: document.getElementById('length-num'),
     lengthLabel: document.getElementById('length-label'),
+    lengthContainer: document.getElementById('length-container'),
     generateBtn: document.getElementById('generate-btn'),
     copyBtn: document.getElementById('copy-btn'),
     themeBtn: document.getElementById('theme-btn'),
     clearTime: document.getElementById('clear-time'),
     entropyText: document.getElementById('entropy-text'),
+    strengthText: document.getElementById('strength-text'),
+    crackText: document.getElementById('crack-text'),
     entropyBar: document.getElementById('entropy-bar'),
     tabPwd: document.getElementById('tab-pwd'),
     tabPass: document.getElementById('tab-pass'),
+    tabUser: document.getElementById('tab-user'),
     pwdOpts: document.getElementById('pwd-options'),
     passOpts: document.getElementById('pass-options'),
+    userOpts: document.getElementById('user-options'),
+    symInput: document.getElementById('sym-input'),
     paranoidOverlay: document.getElementById('paranoid-overlay')
 };
 
 const CHARS = {
     upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     lower: "abcdefghijklmnopqrstuvwxyz",
-    nums: "0123456789",
-    syms: "!@#$%^&*()-_=+[]{};:,.<>/?|~"
+    nums: "0123456789"
 };
+const DEFAULT_SYMS = "!@#$%^&*()-_=+[]{};:,.<>/?|~";
+const SAFE_SYMS = "!@#%^*-_=+:./?";
 
-let isPassphrase = false;
+let currentMode = 'pwd'; // 'pwd', 'pass', 'user'
 let clearTimer;
 
 // --- DUAL-SYNC LENGTH LOGIC ---
@@ -53,8 +60,11 @@ function getSecureRandomInt(max) {
 }
 
 function generate() {
-    isPassphrase ? generatePassphrase() : generatePassword();
-    calculateEntropy();
+    if (currentMode === 'pwd') generatePassword();
+    else if (currentMode === 'pass') generatePassphrase();
+    else if (currentMode === 'user') generateUsername();
+    
+    calculateEntropyAndStrength();
 }
 
 function generatePassword() {
@@ -66,14 +76,13 @@ function generatePassword() {
     if (document.getElementById('opt-lower').checked) { pool += CHARS.lower; activeSets.push(CHARS.lower); }
     if (document.getElementById('opt-nums').checked) { pool += CHARS.nums; activeSets.push(CHARS.nums); }
     
-    // Updated Symbol Logic for Terminal / YAML Safe Mode
     if (document.getElementById('opt-syms').checked) {
-        let symPool = CHARS.syms;
-        if (document.getElementById('opt-safe').checked) {
-            symPool = "!@#%^*-_=+:./?"; 
+        let symPool = el.symInput.value;
+        if (symPool) {
+            pool += symPool;
+            // Treat the custom string as an array of characters for validation
+            activeSets.push(symPool);
         }
-        pool += symPool;
-        activeSets.push(symPool);
     }
     
     if (document.getElementById('opt-ambig').checked) {
@@ -110,6 +119,85 @@ function generatePassphrase() {
     el.result.textContent = phrase.join(sep);
 }
 
+function generateUsername() {
+    // Standard Username: Word + Separator + Word (+ optional number)
+    let w1 = WORDS[getSecureRandomInt(WORDS.length)];
+    let w2 = WORDS[getSecureRandomInt(WORDS.length)];
+    
+    w1 = w1.charAt(0).toUpperCase() + w1.slice(1);
+    w2 = w2.charAt(0).toUpperCase() + w2.slice(1);
+    
+    const sep = document.getElementById('opt-user-sep').value;
+    let result = w1 + sep + w2;
+    
+    if (document.getElementById('opt-user-nums').checked) {
+        let num = getSecureRandomInt(1000).toString().padStart(3, '0');
+        // If a separator is used, append it before the number too (optional aesthetic choice)
+        result += sep ? sep + num : num;
+    }
+    
+    el.result.textContent = result;
+}
+
+// --- STATS AND ENTROPY ---
+function calculateEntropyAndStrength() {
+    let entropy = 0;
+    const len = +el.length.value;
+    
+    if (currentMode === 'pass') {
+        let combinations = WORDS.length;
+        if (document.getElementById('opt-pass-caps').checked) combinations *= 2;
+        if (document.getElementById('opt-pass-nums').checked) combinations *= 10;
+        entropy = len * Math.log2(combinations);
+    } else if (currentMode === 'user') {
+        // 2 Words = log2(7776^2) = 25.85
+        entropy = 2 * Math.log2(WORDS.length);
+        if (document.getElementById('opt-user-nums').checked) {
+            entropy += Math.log2(1000); // 3 digits = 1000 combos = ~9.96 bits
+        }
+    } else {
+        let poolSize = 0;
+        if (document.getElementById('opt-upper').checked) poolSize += 26;
+        if (document.getElementById('opt-lower').checked) poolSize += 26;
+        if (document.getElementById('opt-nums').checked) poolSize += 10;
+        if (document.getElementById('opt-syms').checked) {
+            // Remove duplicates from custom symbol pool length
+            const uniqueSyms = new Set(el.symInput.value.split('')).size;
+            poolSize += uniqueSyms;
+        }
+        entropy = len * Math.log2(poolSize || 1);
+    }
+    
+    // Update UI
+    el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
+    el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
+    
+    // Calculate Strength & Crack Time (Assuming offline fast hash at 10 billion guesses/sec)
+    let strength = "Weak";
+    let crackTime = "Instant";
+    let colorClass = "strength-weak";
+    let barColor = "#dc3545";
+
+    const seconds = Math.pow(2, entropy) / 10000000000;
+
+    if (entropy < 40) {
+        strength = "Weak"; crackTime = "Instant"; colorClass = "strength-weak"; barColor = "#dc3545";
+    } else if (seconds < 86400) { // Less than a day
+        strength = "Fair"; crackTime = "Hours"; colorClass = "strength-fair"; barColor = "#fd7e14";
+    } else if (seconds < 31536000) { // Less than a year
+        strength = "Good"; crackTime = "Days"; colorClass = "strength-good"; barColor = "#28a745";
+    } else if (seconds < 3.15e11) { // Less than 10,000 years
+        strength = "Strong"; crackTime = "Centuries"; colorClass = "strength-strong"; barColor = "#20c997";
+    } else {
+        strength = "Very Strong"; crackTime = "Indefinite"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
+    }
+
+    el.strengthText.textContent = `Strength: ${strength}`;
+    el.strengthText.className = colorClass;
+    el.crackText.textContent = `Crack Time: ${crackTime}`;
+    el.entropyBar.style.backgroundColor = barColor;
+}
+
 // --- UI HELPERS ---
 function showToast(message) {
     const toast = document.getElementById('toast');
@@ -132,44 +220,33 @@ function triggerCopyFeedback() {
     });
 }
 
-function calculateEntropy() {
-    let entropy = 0;
-    const len = +el.length.value;
-    if (isPassphrase) {
-        let combinations = WORDS.length;
-        if (document.getElementById('opt-pass-caps').checked) combinations *= 2;
-        if (document.getElementById('opt-pass-nums').checked) combinations *= 10;
-        entropy = len * Math.log2(combinations);
-    } else {
-        let poolSize = 0;
-        if (document.getElementById('opt-upper').checked) poolSize += 26;
-        if (document.getElementById('opt-lower').checked) poolSize += 26;
-        if (document.getElementById('opt-nums').checked) poolSize += 10;
-        if (document.getElementById('opt-syms').checked) {
-            // Adjust entropy calculation if safe mode reduces the symbol pool
-            poolSize += document.getElementById('opt-safe').checked ? 16 : 28;
-        }
-        entropy = len * Math.log2(poolSize || 1);
-    }
-    el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
-    el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
-    el.entropyBar.style.backgroundColor = entropy > 100 ? "#20c997" : entropy > 60 ? "#ffc107" : "#dc3545";
-}
-
 function updateUI() {
-    el.tabPwd.classList.toggle('active', !isPassphrase);
-    el.tabPass.classList.toggle('active', isPassphrase);
-    el.pwdOpts.classList.toggle('hidden', isPassphrase);
-    el.passOpts.classList.toggle('hidden', !isPassphrase);
-    el.lengthLabel.textContent = isPassphrase ? "Words" : "Length";
+    el.tabPwd.classList.toggle('active', currentMode === 'pwd');
+    el.tabPass.classList.toggle('active', currentMode === 'pass');
+    el.tabUser.classList.toggle('active', currentMode === 'user');
     
-    if (isPassphrase) {
-        el.length.min = el.lengthNum.min = 3;
-        el.length.max = el.lengthNum.max = 20;
-        if (el.length.value > 20) el.length.value = el.lengthNum.value = 10;
+    el.pwdOpts.classList.toggle('hidden', currentMode !== 'pwd');
+    el.passOpts.classList.toggle('hidden', currentMode !== 'pass');
+    el.userOpts.classList.toggle('hidden', currentMode !== 'user');
+    
+    // Hide length controls for Username generation
+    if (currentMode === 'user') {
+        el.lengthContainer.classList.add('hidden');
+        el.length.classList.add('hidden');
     } else {
-        el.length.min = el.lengthNum.min = 4;
-        el.length.max = el.lengthNum.max = 128;
+        el.lengthContainer.classList.remove('hidden');
+        el.length.classList.remove('hidden');
+        
+        el.lengthLabel.textContent = currentMode === 'pass' ? "Words" : "Length";
+        if (currentMode === 'pass') {
+            el.length.min = el.lengthNum.min = 3;
+            el.length.max = el.lengthNum.max = 20;
+            if (el.length.value > 20) el.length.value = el.lengthNum.value = 10;
+        } else {
+            el.length.min = el.lengthNum.min = 4;
+            el.length.max = el.lengthNum.max = 128;
+            if (el.length.value < 12) el.length.value = el.lengthNum.value = 24;
+        }
     }
     generate();
 }
@@ -187,11 +264,24 @@ el.generateBtn.addEventListener('click', generate);
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
 el.length.addEventListener('input', syncLength);
 el.lengthNum.addEventListener('input', syncLength);
-el.tabPwd.addEventListener('click', () => { isPassphrase = false; updateUI(); });
-el.tabPass.addEventListener('click', () => { isPassphrase = true; updateUI(); });
+
+el.tabPwd.addEventListener('click', () => { currentMode = 'pwd'; updateUI(); });
+el.tabPass.addEventListener('click', () => { currentMode = 'pass'; updateUI(); });
+el.tabUser.addEventListener('click', () => { currentMode = 'user'; updateUI(); });
+
+// Handle Safe Only Characters Toggle
+document.getElementById('opt-safe').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        el.symInput.value = SAFE_SYMS;
+    } else {
+        el.symInput.value = DEFAULT_SYMS;
+    }
+    generate();
+});
 
 // Regenerate immediately if any options change
-document.querySelectorAll('.options-grid input, #opt-pass-sep').forEach(input => {
+document.querySelectorAll('.options-grid input, .options-grid select').forEach(input => {
+    input.addEventListener('input', generate);
     input.addEventListener('change', generate);
 });
 
@@ -206,7 +296,7 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// Load prefs and init
+// Init
 try {
     if (localStorage.getItem('vault_theme') === 'dark') {
         document.body.classList.add('dark-mode');
@@ -214,4 +304,4 @@ try {
     }
 } catch (e) {}
 
-generate();
+updateUI();
