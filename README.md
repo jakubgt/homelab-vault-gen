@@ -4,6 +4,8 @@ A hyper-secure, single-file offline password generator built specifically for se
 
 Unlike many online generators or complex Webpack-compiled tools, this generator uses pure Vanilla JavaScript and relies strictly on the Web Crypto API (`window.crypto.getRandomValues`) for OS-level entropy. It is designed to be hosted locally, completely air-gapped from the internet, with zero external dependencies or trackers.
 
+![UI Preview](Preview.png)
+
 ## ✨ Features
 
 * **True Cryptographic Security:** Uses `window.crypto.getRandomValues` instead of `Math.random()` or outdated ARC4 PRNGs.
