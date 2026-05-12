@@ -3,276 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>Homelab Vault Generator</title>
-    <style>
-        /* Light Mode Colors (Now the Default) */
-        :root {
-            --bg-color: #f4f4f9;
-            --container-bg: #ffffff;
-            --text-color: #333333;
-            --input-bg: #eeeeee;
-            --border-color: #cccccc;
-        }
-        /* Dark Mode Colors */
-        body.dark-mode {
-            --bg-color: #121212;
-            --container-bg: #1e1e1e;
-            --text-color: #e0e0e0;
-            --input-bg: #2d2d2d;
-            --border-color: #444;
-        }
-        
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            transition: background-color 0.3s, color 0.3s;
-        }
-        .container {
-            background-color: var(--container-bg);
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            position: relative;
-        }
-        body.dark-mode .container {
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-        /* Theme Toggle Button */
-        .theme-toggle {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: none;
-            border: none;
-            color: var(--text-color);
-            cursor: pointer;
-            font-size: 22px;
-        }
-        #result {
-            background-color: var(--input-bg);
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 5px;
-            border: 1px solid var(--border-color);
-            font-family: monospace;
-            font-size: 18px;
-            word-wrap: break-word;
-            min-height: 22px;
-        }
-        .controls {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .time-inputs {
-            display: flex;
-            gap: 10px;
-        }
-        select, input[type="number"] {
-            padding: 6px;
-            border-radius: 5px;
-            background-color: var(--input-bg);
-            color: var(--text-color);
-            border: 1px solid var(--border-color);
-            font-size: 14px;
-        }
-        input[type="range"] {
-            width: 100%;
-            margin-top: 10px;
-        }
-        button.action-btn {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            margin-bottom: 10px;
-            transition: background-color 0.2s;
-        }
-        button.action-btn:hover { background-color: #0056b3; }
-        #copy-btn { background-color: #28a745; }
-        #copy-btn:hover { background-color: #218838; }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <button class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
         <h2>Secure Generator</h2>
-        <div id="result"></div>
         
-        <div class="controls">
-            <label>Length: <span id="length-val">20</span></label>
-            <input type="range" id="length" min="12" max="64" value="20">
+        <div id="result-container" title="Click to copy">
+            <div id="result"></div>
+            <div id="paranoid-overlay" class="hidden">Hover to Reveal</div>
+        </div>
+        
+        <div class="entropy-meter">
+            <span id="entropy-text">Entropy: 0 bits</span>
+            <div class="entropy-bar-container">
+                <div id="entropy-bar"></div>
+            </div>
+            <small class="disclaimer">Clipboard auto-clear is best-effort. OS history may retain copies.</small>
         </div>
 
-        <div class="setting-row">
-            <label for="clear-time">Auto-Clear Clipboard:</label>
-            <div class="time-inputs">
-                <input type="number" id="custom-time" min="1" placeholder="Secs" style="display: none; width: 60px;">
-                <select id="clear-time">
-                    <option value="30000">30 Seconds</option>
-                    <option value="60000" selected>60 Seconds</option>
-                    <option value="300000">5 Minutes</option>
-                    <option value="custom">Custom...</option>
-                </select>
+        <div class="tabs">
+            <button id="tab-pwd" class="tab-btn active">Password</button>
+            <button id="tab-pass" class="tab-btn">Passphrase</button>
+        </div>
+
+        <div class="controls">
+            <label><span id="length-label">Length</span>: <span id="length-val">20</span></label>
+            <input type="range" id="length" min="4" max="128" value="20">
+
+            <div id="pwd-options" class="options-grid">
+                <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
+                <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
+                <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
+                <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
+                <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous (lI1O0)</label>
+            </div>
+
+            <div id="pass-options" class="options-grid hidden">
+                <label><input type="checkbox" id="opt-pass-caps"> Capitalize Words</label>
+                <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
+                <label>Separator: 
+                    <select id="opt-pass-sep">
+                        <option value="-">Hyphen (-)</option>
+                        <option value="_">Underscore (_)</option>
+                        <option value=".">Period (.)</option>
+                        <option value=" ">Space</option>
+                    </select>
+                </label>
+            </div>
+
+            <hr>
+
+            <div class="setting-row">
+                <label><input type="checkbox" id="opt-paranoid"> <strong>Paranoid Mode</strong><br>
+                <small>No saving, clears on blur, hides text</small></label>
+            </div>
+
+            <div class="setting-row">
+                <label for="clear-time">Auto-Clear:</label>
+                <div class="time-inputs">
+                    <input type="number" id="custom-time" min="1" placeholder="Secs" style="display: none; width: 60px;">
+                    <select id="clear-time">
+                        <option value="30000">30 Seconds</option>
+                        <option value="60000" selected>60 Seconds</option>
+                        <option value="300000">5 Minutes</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                </div>
             </div>
         </div>
 
-        <button class="action-btn" id="generate-btn">Generate Password</button>
-        <button class="action-btn" id="copy-btn">Copy Password</button>
+        <button class="action-btn" id="generate-btn">Generate</button>
+        <button class="action-btn" id="copy-btn">Copy</button>
     </div>
 
-    <script>
-        const resultEl = document.getElementById('result');
-        const lengthEl = document.getElementById('length');
-        const lengthVal = document.getElementById('length-val');
-        const generateBtn = document.getElementById('generate-btn');
-        const copyBtn = document.getElementById('copy-btn');
-        const themeBtn = document.getElementById('theme-btn');
-        const clearTimeSelect = document.getElementById('clear-time');
-        const customTimeInput = document.getElementById('custom-time');
-
-        // Character Pool
-        const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,.<>/?|~"; 
-
-        // --- 1. LOAD SAVED PREFERENCES ---
-        
-        // Load Theme
-        const savedTheme = localStorage.getItem('vault_theme');
-        if (savedTheme === 'dark') {
-            document.body.classList.add('dark-mode');
-            themeBtn.innerText = '☀️';
-        }
-
-        // Load Clear Timer Selection
-        const savedTimerType = localStorage.getItem('vault_timer_type');
-        if (savedTimerType) {
-            clearTimeSelect.value = savedTimerType;
-            if (savedTimerType === 'custom') {
-                customTimeInput.style.display = 'block';
-            }
-        }
-
-        // Load Custom Seconds Value
-        const savedCustomSecs = localStorage.getItem('vault_custom_secs');
-        if (savedCustomSecs) {
-            customTimeInput.value = savedCustomSecs;
-        }
-
-        // Load Saved Length (THIS WAS MISSING)
-        const savedLength = localStorage.getItem('vault_length');
-        if (savedLength) {
-            lengthEl.value = savedLength;
-            lengthVal.innerText = savedLength;
-        }
-
-
-        // --- 2. EVENT LISTENERS WITH SAVING ---
-
-        // Update length text when sliding AND Save it (THIS WAS MISSING)
-        lengthEl.addEventListener('input', () => {
-            lengthVal.innerText = lengthEl.value;
-            localStorage.setItem('vault_length', lengthEl.value);
-        });
-
-        // Theme Toggle Logic
-        themeBtn.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            const isDark = document.body.classList.contains('dark-mode');
-            themeBtn.innerText = isDark ? '☀️' : '🌙';
-            
-            // Save theme choice
-            localStorage.setItem('vault_theme', isDark ? 'dark' : 'light');
-        });
-
-        // Show/Hide Custom Time Input and Save Selection
-        clearTimeSelect.addEventListener('change', () => {
-            localStorage.setItem('vault_timer_type', clearTimeSelect.value);
-
-            if (clearTimeSelect.value === 'custom') {
-                customTimeInput.style.display = 'block';
-                customTimeInput.focus();
-            } else {
-                customTimeInput.style.display = 'none';
-            }
-        });
-
-        // Save custom seconds as user types
-        customTimeInput.addEventListener('input', () => {
-            localStorage.setItem('vault_custom_secs', customTimeInput.value);
-        });
-
-
-        // --- 3. GENERATION & COPY LOGIC ---
-
-        // Generate Crypto-Secure Password
-        function generatePassword() {
-            const length = +lengthEl.value;
-            let password = "";
-            const randomValues = new Uint32Array(length);
-            window.crypto.getRandomValues(randomValues);
-
-            for (let i = 0; i < length; i++) {
-                password += CHARS[randomValues[i] % CHARS.length];
-            }
-            resultEl.innerText = password;
-            copyBtn.innerText = "Copy Password"; 
-        }
-
-        // Copy with selectable/custom Auto-Clear
-        let clearTimer;
-        copyBtn.addEventListener('click', () => {
-            const pwd = resultEl.innerText;
-            if (!pwd) return;
-
-            let delay;
-            let timeLabel;
-
-            // Handle custom time logic
-            if (clearTimeSelect.value === 'custom') {
-                const customSecs = parseInt(customTimeInput.value, 10);
-                if (isNaN(customSecs) || customSecs <= 0) {
-                    alert("Please enter a valid number of seconds.");
-                    return;
-                }
-                delay = customSecs * 1000;
-                timeLabel = `${customSecs}s`;
-            } else {
-                delay = parseInt(clearTimeSelect.value, 10);
-                timeLabel = delay === 30000 ? "30s" : delay === 60000 ? "60s" : "5m";
-            }
-
-            navigator.clipboard.writeText(pwd).then(() => {
-                copyBtn.innerText = `Copied! (Clears in ${timeLabel})`;
-                clearTimeout(clearTimer);
-                
-                clearTimer = setTimeout(() => {
-                    navigator.clipboard.writeText("");
-                    copyBtn.innerText = "Copy Password";
-                }, delay);
-            });
-        });
-
-        // Generate a password as soon as the page loads
-        generatePassword();
-        generateBtn.addEventListener('click', generatePassword);
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
