@@ -27,7 +27,7 @@ const CHARS = {
 let isPassphrase = false;
 let clearTimer;
 
-// --- DUAL-SYNC LENGTH LOGIC  ---
+// --- DUAL-SYNC LENGTH LOGIC ---
 
 function syncLength(e) {
     let val = parseInt(e.target.value);
@@ -43,34 +43,7 @@ function syncLength(e) {
     generate();
 }
 
-// --- THEME & STORAGE LOGIC  ---
-
-function toggleTheme() {
-    const isDark = document.body.classList.toggle('dark-mode');
-    el.themeBtn.textContent = isDark ? '☀️' : '🌙';
-    
-    if (!document.getElementById('opt-paranoid').checked) {
-        try {
-            localStorage.setItem('vault_theme', isDark ? 'dark' : 'light');
-        } catch (e) {
-            console.warn("Storage blocked in local file mode.");
-        }
-    }
-}
-
-function loadPrefs() {
-    try {
-        const theme = localStorage.getItem('vault_theme');
-        if (theme === 'dark') {
-            document.body.classList.add('dark-mode');
-            el.themeBtn.textContent = '☀️';
-        }
-    } catch (e) {
-        console.warn("Could not load preferences.");
-    }
-}
-
-// --- CORE LOGIC  ---
+// --- CORE GENERATION ---
 
 function getSecureRandomInt(max) {
     const randomBytes = new Uint32Array(1);
@@ -96,21 +69,16 @@ function generatePassword() {
     if (document.getElementById('opt-nums').checked) { pool += CHARS.nums; activeSets.push(CHARS.nums); }
     if (document.getElementById('opt-syms').checked) { pool += CHARS.syms; activeSets.push(CHARS.syms); }
     
-    if (document.getElementById('opt-ambig').checked) {
-        pool = pool.replace(/[lI1O0]/g, "");
-    }
+    if (document.getElementById('opt-ambig').checked) pool = pool.replace(/[lI1O0]/g, "");
 
     if (!pool) { el.result.textContent = "Select a pool!"; return; }
 
     let pwd = "";
     let isValid = false;
 
-    // Character Class Guarantee 
     while (!isValid) {
         pwd = "";
-        for (let i = 0; i < len; i++) {
-            pwd += pool[getSecureRandomInt(pool.length)];
-        }
+        for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
         isValid = activeSets.every(set => {
             const setChars = document.getElementById('opt-ambig').checked ? set.replace(/[lI1O0]/g, "") : set;
             return pwd.split('').some(char => setChars.includes(char));
@@ -132,7 +100,7 @@ function generatePassphrase() {
     el.result.textContent = phrase.join(sep);
 }
 
-// --- FEEDBACK & UI  ---
+// --- UI HELPERS ---
 
 function showToast(message) {
     const toast = document.getElementById('toast');
@@ -143,9 +111,6 @@ function showToast(message) {
 
 function triggerCopyFeedback() {
     const delay = parseInt(el.clearTime.value);
-    el.resultContainer.classList.add('copy-flash');
-    setTimeout(() => el.resultContainer.classList.remove('copy-flash'), 500);
-
     navigator.clipboard.writeText(el.result.textContent).then(() => {
         showToast(`Copied! Clearing in ${delay/1000}s`);
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
@@ -179,25 +144,11 @@ function calculateEntropy() {
     el.entropyBar.style.backgroundColor = entropy > 100 ? "#20c997" : entropy > 60 ? "#ffc107" : "#dc3545";
 }
 
-// --- INITIALIZATION & LISTENERS  ---
-
-el.themeBtn.addEventListener('click', toggleTheme);
-el.generateBtn.addEventListener('click', generate);
-el.copyBtn.addEventListener('click', triggerCopyFeedback);
-
-el.length.addEventListener('input', syncLength);
-el.lengthNum.addEventListener('input', syncLength);
-
-el.tabPwd.addEventListener('click', () => { isPassphrase = false; updateUI(); });
-el.tabPass.addEventListener('click', () => { isPassphrase = true; updateUI(); });
-
 function updateUI() {
     el.tabPwd.classList.toggle('active', !isPassphrase);
     el.tabPass.classList.toggle('active', isPassphrase);
     el.pwdOpts.classList.toggle('hidden', isPassphrase);
     el.passOpts.classList.toggle('hidden', !isPassphrase);
-    
-    // Label Sync 
     el.lengthLabel.textContent = isPassphrase ? "Words" : "Length";
     
     if (isPassphrase) {
@@ -211,16 +162,34 @@ function updateUI() {
     generate();
 }
 
+// --- THEME ---
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    el.themeBtn.textContent = isDark ? '☀️' : '🌙';
+    try { localStorage.setItem('vault_theme', isDark ? 'dark' : 'light'); } catch (e) {}
+}
+
+// --- LISTENERS ---
+el.themeBtn.addEventListener('click', toggleTheme);
+el.generateBtn.addEventListener('click', generate);
+el.copyBtn.addEventListener('click', triggerCopyFeedback);
+el.length.addEventListener('input', syncLength);
+el.lengthNum.addEventListener('input', syncLength);
+el.tabPwd.addEventListener('click', () => { isPassphrase = false; updateUI(); });
+el.tabPass.addEventListener('click', () => { isPassphrase = true; updateUI(); });
+
 document.getElementById('opt-paranoid').addEventListener('change', (e) => {
     document.body.classList.toggle('paranoid-active', e.target.checked);
     el.paranoidOverlay.classList.toggle('hidden', !e.target.checked);
 });
 
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && document.getElementById('opt-paranoid').checked) {
-        el.result.textContent = "";
+// Load prefs and init
+try {
+    if (localStorage.getItem('vault_theme') === 'dark') {
+        document.body.classList.add('dark-mode');
+        el.themeBtn.textContent = '☀️';
     }
-});
+} catch (e) {}
 
-loadPrefs();
 generate();
