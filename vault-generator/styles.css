@@ -35,7 +35,7 @@ body {
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     width: 100%;
-    max-width: 450px;
+    max-width: 480px;
     position: relative;
 }
 
@@ -50,10 +50,17 @@ body {
     font-size: 22px;
 }
 
+h2 { margin-top: 0; margin-bottom: 15px; }
+
+/* Tabs re-ordered below title */
+.tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 15px; }
+.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; font-size: 15px; transition: 0.2s; }
+.tab-btn.active { opacity: 1; border-bottom: 3px solid var(--accent); font-weight: bold; }
+
 #result-container {
     position: relative;
     background-color: var(--input-bg);
-    margin: 20px 0 10px 0;
+    margin: 10px 0 10px 0;
     border-radius: 5px;
     border: 2px solid var(--border-color);
     cursor: pointer;
@@ -71,7 +78,26 @@ body {
     word-wrap: break-word;
     word-break: break-all;
     user-select: all;
+    text-align: center;
 }
+
+/* Stats Row */
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.strength-weak { color: #dc3545; }
+.strength-fair { color: #fd7e14; }
+.strength-good { color: #28a745; }
+.strength-strong { color: #20c997; }
+.strength-very-strong { color: #8a2be2; } /* Purple for Very Strong */
+
+.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-bottom: 20px; }
+#entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
 
 /* Length Controls */
 .length-header {
@@ -82,77 +108,37 @@ body {
     padding: 0 4px;
 }
 
-#length-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-color);
-}
-
+#length-label { font-size: 14px; font-weight: 600; color: var(--text-color); }
 #length-num {
-    width: 50px;
-    height: 28px;
-    background: var(--input-bg);
-    border: 1px solid var(--border-color);
-    color: var(--accent);
-    padding: 0;
-    border-radius: 6px;
-    text-align: center;
-    font-weight: bold;
-    font-size: 14px;
-    outline: none;
-    appearance: textfield;
+    width: 50px; height: 28px; background: var(--input-bg); border: 1px solid var(--border-color);
+    color: var(--accent); padding: 0; border-radius: 6px; text-align: center;
+    font-weight: bold; font-size: 14px; outline: none; appearance: textfield;
 }
 
 #length-num::-webkit-inner-spin-button, 
-#length-num::-webkit-outer-spin-button { 
-    -webkit-appearance: none; 
-    margin: 0; 
-}
+#length-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-.full-slider {
-    width: 100%;
-    margin: 0 0 25px 0;
-    cursor: pointer;
-    height: 6px;
-    border-radius: 3px;
-    appearance: none;
-    background: var(--input-bg);
-}
-
+.full-slider { width: 100%; margin: 0 0 20px 0; cursor: pointer; height: 6px; border-radius: 3px; appearance: none; background: var(--input-bg); }
 .full-slider::-webkit-slider-thumb {
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid var(--container-bg);
+    appearance: none; width: 18px; height: 18px; background: var(--accent);
+    border-radius: 50%; cursor: pointer; border: 2px solid var(--container-bg);
 }
 
-/* UI Elements */
-.entropy-meter { margin-bottom: 15px; }
-#entropy-text { font-size: 14px; font-weight: bold; }
-.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-top: 5px; }
-#entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
-
-.tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 15px; }
-.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; }
-.tab-btn.active { opacity: 1; border-bottom: 2px solid var(--accent); font-weight: bold; }
-
-.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
-
-/* Option Row Styling */
-.full-width-opt {
+/* Options Grid */
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; margin-bottom: 10px; }
+.full-width-opt { grid-column: 1 / -1; margin-top: 4px; }
+.full-width-input {
     grid-column: 1 / -1;
-    margin-top: 4px;
-}
-
-.opt-desc {
-    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
     color: var(--text-color);
-    opacity: 0.6;
-    margin-left: 24px;
-    margin-top: 2px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 14px;
+    margin-top: 5px;
 }
 
 .action-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; width: 100%; margin-top: 10px; cursor: pointer; font-weight: bold; }
