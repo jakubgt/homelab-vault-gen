@@ -176,12 +176,20 @@
             customTimeInput.value = savedCustomSecs;
         }
 
+        // Load Saved Length (NEW)
+        const savedLength = localStorage.getItem('vault_length');
+        if (savedLength) {
+            lengthEl.value = savedLength;
+            lengthVal.innerText = savedLength;
+        }
+
 
         // --- 2. EVENT LISTENERS WITH SAVING ---
 
-        // Update length text when sliding
+        // Update length text when sliding AND Save it (UPDATED)
         lengthEl.addEventListener('input', () => {
             lengthVal.innerText = lengthEl.value;
+            localStorage.setItem('vault_length', lengthEl.value);
         });
 
         // Theme Toggle Logic
