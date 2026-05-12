@@ -12,17 +12,17 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 * **True Cryptographic Security:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias, ensuring perfect uniform distribution of characters.
 * **Passphrase / Diceware Mode:** Generate highly memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
-  * Diceware Mode: Uses the 7,776-word EFF Large Wordlist.
-* **Character Class:** Enforces enterprise-grade security by guaranteeing at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in the final password.
+    * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
+* **Character Class Guarantees:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password.
 * **Real-Time Entropy Meter:** Accurately calculates true bit-entropy using the following formula:
   $$H = L \cdot \log_{2}(N)$$
   Where $L$ is length and $N$ is the charset size.
 * **Paranoid Mode & Memory Wiping:**
-  * Blurs the password on-screen until hovered.
-  * Auto-clears the DOM if you switch browser tabs or close the window.
-  * Disables all `localStorage` saving.
-* **Strict Content Security Policy (CSP):** The application is strictly separated into HTML, CSS, and JS files, allowing web servers to ban all `'unsafe-inline'` executions.
-* **Persistent Settings:** (When Paranoid Mode is off) Uses local browser storage to securely remember your preferred theme, timer, toggles, and lengths.
+    * **Visual Privacy:** Blurs the password on-screen until hovered.
+    * **Auto-Clear:** Automatically clears the DOM and resets results if you switch browser tabs, minimize, or close the window.
+    * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains.
+* **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
+* **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
 
 ---
 
@@ -31,17 +31,17 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 To ensure this tool fits your security requirements, please review its intended scope.
 
 ### This project PROTECTS against:
-* **Weak PRNGs:** Uses OS-level entropy to eliminate predictable patterns.
-* **Online Leakage:** Your passwords never touch a network or a remote server.
+* **Weak PRNGs:** Uses OS-level entropy to eliminate predictable generation patterns.
+* **Online Leakage:** Your passwords never touch a network or a remote server; all logic is client-side.
 * **No Telemetry:** Zero external calls or dependencies means no "supply chain" script injections.
-* **Interception:** Since all logic is local, secrets cannot be sniffed in transit.
+* **Interception:** Secrets cannot be sniffed in transit because the tool operates entirely locally.
 
 ### This project does NOT protect against:
-* **Compromised Browsers:** A hijacked browser can see everything you generate.
-* **OS-Level Malware:** Keyloggers or screen-recorders bypass all web-app security.
-* **Clipboard History:** Clipboard auto-clear is "best-effort"; OS managers may still retain copies.
-* **Malicious Extensions:** Some browser extensions can read the data on your screen.
-* **Insecure Contexts:** Browsers disable `window.crypto` on plain HTTP (except localhost).
+* **Compromised Browsers:** A hijacked browser or malicious profile can see everything you generate.
+* **OS-Level Malware:** Keyloggers or screen-recorders bypass all web-application security layers.
+* **Clipboard History:** Clipboard auto-clear is "best-effort"; OS-level clipboard managers may still retain copies.
+* **Malicious Extensions:** Browser extensions often have permissions to read data directly from the screen.
+* **Insecure Contexts:** Browsers will disable the Web Crypto API on plain HTTP connections (except for `localhost`).
 
 ---
 
