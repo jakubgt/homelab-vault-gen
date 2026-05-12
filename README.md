@@ -39,12 +39,11 @@ If you want to quickly host the generator on your Mac or Windows machine so your
 ### Method 3: Docker (Homelab Standard)
 If you prefer containerization on Windows (via Docker Desktop) or Mac, you can instantly spin up a secure NGINX container hosting your file.
 
-1. Navigate to the folder containing your index.html.
+1. Navigate to the folder containing your `index.html`.
 2. Run this single command to mount the file into a lightweight NGINX alpine container:
-    ```bash
-      docker run -d -p 8080:80 --name pass-gen -v $(pwd)/index.html:/usr/share/nginx/html/index.html:ro nginx:alpine
-      ```
-3. Open your browser and navigate to `http://localhost:8080`.
+   ```bash
+   docker run -d -p 8080:80 --name pass-gen -v $(pwd)/index.html:/usr/share/nginx/html/index.html:ro nginx:alpine
+3. Open your browser and navigate to http://localhost:8080.
 
 ---
 
