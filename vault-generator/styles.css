@@ -73,29 +73,59 @@ body {
     user-select: all;
 }
 
-/* New Length Styling */
+/* Tighter Length Section  */
 .length-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
+    align-items: flex-end; /* Vertically aligns label and input box  */
+    margin-bottom: 8px;    /* Tighter spacing to slider  */
+    padding: 0 2px;
+}
+
+#length-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
 }
 
 #length-num {
-    width: 65px;
+    width: 50px;
+    height: 28px;
     background: var(--input-bg);
     border: 1px solid var(--border-color);
-    color: var(--text-color);
-    padding: 4px;
-    border-radius: 4px;
+    color: var(--accent); /* Highlights the active value  */
+    padding: 0;
+    border-radius: 6px;
     text-align: center;
     font-weight: bold;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#length-num:focus {
+    border-color: var(--accent);
 }
 
 .full-slider {
     width: 100%;
-    margin-bottom: 20px;
+    margin: 0 0 25px 0; /* Pulls slider closer to text  */
     cursor: pointer;
+    height: 6px;
+    border-radius: 3px;
+    appearance: none;
+    background: var(--input-bg);
+}
+
+/* Precision Slider Thumb  */
+.full-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid var(--container-bg);
 }
 
 /* Paranoid Mode Styles */
