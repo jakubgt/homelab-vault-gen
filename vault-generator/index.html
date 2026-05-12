@@ -20,7 +20,11 @@
         </div>
         
         <div class="entropy-meter">
-            <span id="entropy-text">Entropy: 0 bits</span>
+            <div class="entropy-stats">
+                <span id="entropy-text">Entropy: 0 bits</span>
+                <span id="strength-text">Strength: --</span>
+                <span id="crack-text">Crack Time: --</span>
+            </div>
             <div class="entropy-bar-container">
                 <div id="entropy-bar"></div>
             </div>
@@ -29,21 +33,31 @@
         <div class="tabs">
             <button id="tab-pwd" class="tab-btn active">Password</button>
             <button id="tab-pass" class="tab-btn">Passphrase</button>
+            <button id="tab-user" class="tab-btn">Username</button>
         </div>
 
         <div class="controls">
-            <div class="length-header">
-                <span id="length-label">Length</span>
-                <input type="number" id="length-num" min="4" max="128" value="20">
+            <div id="length-wrapper">
+                <div class="length-header">
+                    <span id="length-label">Length</span>
+                    <input type="number" id="length-num" min="4" max="128" value="20">
+                </div>
+                <input type="range" id="length" min="4" max="128" value="20" class="full-slider">
             </div>
-            <input type="range" id="length" min="4" max="128" value="20" class="full-slider">
 
             <div id="pwd-options" class="options-grid">
                 <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
                 <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
                 <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
-                <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
                 <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous (lI1O0)</label>
+            </div>
+            
+            <div id="pwd-sym-options" class="setting-row">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
+                    <label style="font-size: 12px;"><input type="checkbox" id="opt-safe-syms"> Safe Only</label>
+                </div>
+                <input type="text" id="sym-pool" value="!@#$%^&*()-_=+[]{};:,.<>/?|~" class="sym-input" placeholder="Custom symbol pool...">
             </div>
 
             <div id="pass-options" class="options-grid hidden">
@@ -55,6 +69,18 @@
                         <option value="_">Underscore (_)</option>
                         <option value=".">Period (.)</option>
                         <option value=" ">Space</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="user-options" class="options-grid hidden">
+                <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
+                <label>Separator: 
+                    <select id="opt-user-sep">
+                        <option value="">None</option>
+                        <option value="-">Hyphen (-)</option>
+                        <option value="_">Underscore (_)</option>
+                        <option value=".">Period (.)</option>
                     </select>
                 </label>
             </div>
