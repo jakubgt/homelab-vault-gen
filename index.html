@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Lab Vault - Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 450px;
+        }
+        h2 { text-align: center; margin-top: 0; color: #ffffff; }
+        .password-display {
+            background-color: #2d2d2d;
+            padding: 15px;
+            font-size: 24px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            word-break: break-all;
+            letter-spacing: 2px;
+            font-family: monospace;
+            border: 1px solid #3d3d3d;
+        }
+        .controls { display: flex; flex-direction: column; gap: 15px; }
+        .control-group { display: flex; justify-content: space-between; align-items: center; }
+        input[type="range"] { flex-grow: 1; margin: 0 15px; cursor: pointer; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button {
+            flex: 1;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        #copy-btn { background-color: #28a745; }
+        #copy-btn:hover { background-color: #218838; }
+        input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Secure Generator</h2>
+    <div class="password-display" id="result">Loading...</div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label>Length: <span id="length-val">20</span></label>
+            <input type="range" id="length" min="12" max="64" value="20">
+        </div>
+        <div class="control-group">
+            <label>Uppercase (A-Z)</label>
+            <input type="checkbox" id="uppercase" checked>
+        </div>
+        <div class="control-group">
+            <label>Lowercase (a-z)</label>
+            <input type="checkbox" id="lowercase" checked>
+        </div>
+        <div class="control-group">
+            <label>Numbers (0-9)</label>
+            <input type="checkbox" id="numbers" checked>
+        </div>
+        <div class="control-group">
+            <label>Symbols (!@#$)</label>
+            <input type="checkbox" id="symbols" checked>
+        </div>
+        <div class="btn-group">
+            <button id="generate">Generate</button>
+            <button id="copy-btn">Copy Password</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function getSecureRandomInt(max) {
+        const array = new Uint32Array(1);
+        window.crypto.getRandomValues(array);
+        return array[0] % max;
+    }
+
+    function generatePass() {
+        const length = document.getElementById('length').value;
+        const useUpper = document.getElementById('uppercase').checked;
+        const useLower = document.getElementById('lowercase').checked;
+        const useNum = document.getElementById('numbers').checked;
+        const useSym = document.getElementById('symbols').checked;
+
+        let charset = "";
+        if (useUpper) charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        if (useLower) charset += "abcdefghijklmnopqrstuvwxyz";
+        if (useNum) charset += "0123456789";
+        
+        // Expanded 29-character symbol pool
+        if (useSym) charset += "!@#$%^&*()-_=+[]{};:,.<>/?|~";
+
+        if (charset === "") {
+            charset = "abcdefghijklmnopqrstuvwxyz";
+            document.getElementById('lowercase').checked = true;
+        }
+
+        let retVal = "";
+        for (let i = 0; i < length; ++i) {
+            retVal += charset.charAt(getSecureRandomInt(charset.length));
+        }
+
+        document.getElementById('result').innerText = retVal;
+        document.getElementById('copy-btn').innerText = "Copy Password";
+    }
+
+    document.getElementById('length').addEventListener('input', function(e) {
+        document.getElementById('length-val').innerText = e.target.value;
+        generatePass();
+    });
+
+    const toggles = document.querySelectorAll('input[type="checkbox"]');
+    toggles.forEach(toggle => toggle.addEventListener('change', generatePass));
+    document.getElementById('generate').addEventListener('click', generatePass);
+
+    document.getElementById('copy-btn').addEventListener('click', function() {
+        const pwd = document.getElementById('result').innerText;
+        navigator.clipboard.writeText(pwd).then(() => {
+            const btn = document.getElementById('copy-btn');
+            btn.innerText = "Copied!";
+            setTimeout(() => btn.innerText = "Copy Password", 2000);
+        });
+    });
+
+    window.onload = generatePass;
+</script>
+
+</body>
+</html>
