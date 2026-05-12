@@ -73,6 +73,31 @@ body {
     user-select: all;
 }
 
+/* New Length Styling */
+.length-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+#length-num {
+    width: 65px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 4px;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.full-slider {
+    width: 100%;
+    margin-bottom: 20px;
+    cursor: pointer;
+}
+
 /* Paranoid Mode Styles */
 .paranoid-active #result { filter: blur(8px); opacity: 0.5; }
 .paranoid-active #result-container:hover #result { filter: blur(0); opacity: 1; }
