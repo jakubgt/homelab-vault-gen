@@ -22,7 +22,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 Because this application relies entirely on client-side code with zero external dependencies, it is incredibly easy to deploy.
 
-### Method 2: Local File Execution (Air-Gapped, easiest)
+### Method 1: Local File Execution (Air-Gapped, easiest)
 You do not need a web server at all to use this securely.
 
 Download the repository folder to your Windows or Mac machine.
@@ -56,7 +56,7 @@ Run the built-in HTTP server:
 
 ---
 
-## 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX)
+### 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX)
 It is highly recommended to host this on a dedicated, unprivileged LXC container using NGINX to take advantage of the strict CSP headers.
 
 1. Prepare the Environment
