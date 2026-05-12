@@ -84,8 +84,8 @@ Run the built-in HTTP server:
 
 ---
 
-### 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX) (Homelab Standard - Recommended)
-It is highly recommended to host this on a dedicated, unprivileged LXC container using NGINX to take advantage of the strict CSP headers.
+### 🚀 Advanced Deployment (Homelab Standard - Recommended)
+It is highly recommended to host this on a dedicated, unprivileged Debian/Ubuntu LXC container using NGINX to take advantage of the strict CSP headers.
 
 1. Prepare the Environment
 Update your system and install NGINX and Git:
