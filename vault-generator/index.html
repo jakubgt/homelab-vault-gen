@@ -32,8 +32,11 @@
         </div>
 
         <div class="controls">
-            <label><span id="length-label">Length</span>: <span id="length-val">20</span></label>
-            <input type="range" id="length" min="4" max="128" value="20">
+            <div class="length-header">
+                <label id="length-label">Length</label>
+                <input type="number" id="length-num" min="4" max="128" value="20">
+            </div>
+            <input type="range" id="length" min="4" max="128" value="20" class="full-slider">
 
             <div id="pwd-options" class="options-grid">
                 <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
