@@ -95,12 +95,11 @@ apt install nginx git ufw -y
 
 ### 2. Deploy the Code
 ```bash
-echo "Clearing old files and pulling your custom generator..."
+# Clear old files and pull the generator
 rm -rf /var/www/html/*
-
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Move all files and clean up
+# Ensure files land in the ROOT of /var/www/html, not a subfolder
 cp -r /tmp/passgen/* /var/www/html/
 rm -rf /tmp/passgen
 
