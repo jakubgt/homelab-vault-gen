@@ -2,17 +2,8 @@ services:
   vault-gen:
     image: nginx:alpine
     container_name: vault-gen
+    network_mode: host # REQUIRED for unprivileged LXC compatibility
     read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 50
-    mem_limit: 64m
-    cpus: "0.5"
-    ports:
-      - "8080:80"
-    # Added tmpfs to allow NGINX to write temp files in a read-only environment
     tmpfs:
       - /var/cache/nginx:mode=777
       - /var/run:mode=777
