@@ -176,7 +176,7 @@
             customTimeInput.value = savedCustomSecs;
         }
 
-        // Load Saved Length (NEW)
+        // Load Saved Length (THIS WAS MISSING)
         const savedLength = localStorage.getItem('vault_length');
         if (savedLength) {
             lengthEl.value = savedLength;
@@ -186,7 +186,7 @@
 
         // --- 2. EVENT LISTENERS WITH SAVING ---
 
-        // Update length text when sliding AND Save it (UPDATED)
+        // Update length text when sliding AND Save it (THIS WAS MISSING)
         lengthEl.addEventListener('input', () => {
             lengthVal.innerText = lengthEl.value;
             localStorage.setItem('vault_length', lengthEl.value);
