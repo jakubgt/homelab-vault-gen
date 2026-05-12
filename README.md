@@ -12,13 +12,15 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 * **True Cryptographic Security:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias, ensuring perfect uniform distribution of characters.
 * **Passphrase / Diceware Mode:** Generate highly memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
-* **Granular Character Controls:** Enforces character class guarantees (must include at least one of selected types) and includes an option to strip ambiguous characters (`lI1O0`).
-* **Real-Time Entropy Meter:** Accurately calculates true bit-entropy ($H = L \cdot \log_2(N)$) based on your selected character pools and length.
+* **Character Class Guarantees:** Enforces enterprise-grade security by guaranteeing at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in the final password.
+* **Real-Time Entropy Meter:** Accurately calculates true bit-entropy using the following formula:
+  $$H = L \cdot \log_{2}(N)$$
+  Where $L$ is length and $N$ is the charset size.
 * **Paranoid Mode & Memory Wiping:** * Blurs the password on-screen until hovered.
   * Auto-clears the DOM if you switch browser tabs or close the window.
   * Disables all `localStorage` saving.
 * **Strict Content Security Policy (CSP):** The application is strictly separated into HTML, CSS, and JS files, allowing web servers to ban all `'unsafe-inline'` executions.
-* **Persistent Settings:** (When Paranoid Mode is off) Uses local browser storage to securely remember your preferred theme, timer, toggles, and lengths without ever talking to a server.
+* **Persistent Settings:** (When Paranoid Mode is off) Uses local browser storage to securely remember your preferred theme, timer, toggles, and lengths.
 
 ---
 
@@ -44,7 +46,7 @@ The repository includes a hardened NGINX configuration and a `docker-compose.yml
    ```bash
    docker-compose up -d
    ```
-4. Access the generator at http://localhost:8080.
+4. Access the generator at http://localhost (or your server's IP)
 
 ### Method 3: Python Local Server (Quick Network Access)
 If you want to quickly host the generator on your machine so other local devices can access it:
@@ -119,6 +121,9 @@ ufw default allow outgoing
 ufw allow 80/tcp
 ufw enable
 ```
+Pro-Tip:
+
+💡 LXC/Proxmox Note: If running in an unprivileged container, the included Docker config uses network_mode: host. This ensures the web server can bind to the network correctly without complex bridge configurations..
 
 ## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
