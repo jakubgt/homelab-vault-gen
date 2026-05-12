@@ -12,8 +12,8 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Maximum Entropy:** Defaults to 20 characters and features an expanded 29-character symbol pool (`!@#$%^&*()-_=+[]{};:,.<>/?|~`).
 * **Zero Dependencies:** No React, no Webpack, no external CDNs, and no telemetry. Just one clean `index.html` file containing HTML, CSS, and JS.
 * **Air-Gap Ready:** Runs 100% client-side in the browser.
-* **Modern UI:** Clean dark mode interface. (White mode with toggle coming soon!)
-* **1-Click Copy:** Native clipboard API integration with visual feedback.
+* **Modern UI:** Clean, responsive interface featuring a default Light Mode with a Dark Mode toggle.
+* **1-Click Copy & Auto-Clear:** Native clipboard API integration with visual feedback and a customizable auto-clear timer (30s, 60s, 5m, or custom) to prevent passwords from lingering in memory.
 
 ---
 
@@ -51,7 +51,7 @@ find /var/www/html -type f -exec chmod 444 {} \;
 ```
 
 ### 4. Hardening (Optional but Recommended)
-For maximum security, configure NGINX to drop its version number and add security headers:
+For maximum security, configure NGINX to drop its version number, add security headers, and enforce a strict Content Security Policy (CSP) tailored for an inline single-file app:
 ```bash
 echo 'add_header X-Frame-Options "DENY";' > /etc/nginx/conf.d/security.conf
 echo 'add_header X-Content-Type-Options "nosniff";' >> /etc/nginx/conf.d/security.conf
