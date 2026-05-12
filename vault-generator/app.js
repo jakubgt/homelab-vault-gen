@@ -2,7 +2,7 @@ const el = {
     result: document.getElementById('result'),
     resultContainer: document.getElementById('result-container'),
     length: document.getElementById('length'),
-    lengthNum: document.getElementById('length-num'), // Manual input field
+    lengthNum: document.getElementById('length-num'),
     lengthLabel: document.getElementById('length-label'),
     generateBtn: document.getElementById('generate-btn'),
     copyBtn: document.getElementById('copy-btn'),
@@ -27,12 +27,10 @@ const CHARS = {
 let isPassphrase = false;
 let clearTimer;
 
-// --- DUAL-SYNC LENGTH LOGIC ---
+// --- DUAL-SYNC LENGTH LOGIC  ---
 
 function syncLength(e) {
     let val = parseInt(e.target.value);
-    
-    // Bounds checking
     const min = parseInt(el.length.min);
     const max = parseInt(el.length.max);
     
@@ -45,7 +43,7 @@ function syncLength(e) {
     generate();
 }
 
-// --- THEME & STORAGE LOGIC ---
+// --- THEME & STORAGE LOGIC  ---
 
 function toggleTheme() {
     const isDark = document.body.classList.toggle('dark-mode');
@@ -72,7 +70,7 @@ function loadPrefs() {
     }
 }
 
-// --- CORE LOGIC ---
+// --- CORE LOGIC  ---
 
 function getSecureRandomInt(max) {
     const randomBytes = new Uint32Array(1);
@@ -107,6 +105,7 @@ function generatePassword() {
     let pwd = "";
     let isValid = false;
 
+    // Character Class Guarantee 
     while (!isValid) {
         pwd = "";
         for (let i = 0; i < len; i++) {
@@ -133,7 +132,7 @@ function generatePassphrase() {
     el.result.textContent = phrase.join(sep);
 }
 
-// --- FEEDBACK & UI ---
+// --- FEEDBACK & UI  ---
 
 function showToast(message) {
     const toast = document.getElementById('toast');
@@ -180,13 +179,12 @@ function calculateEntropy() {
     el.entropyBar.style.backgroundColor = entropy > 100 ? "#20c997" : entropy > 60 ? "#ffc107" : "#dc3545";
 }
 
-// --- INITIALIZATION & LISTENERS ---
+// --- INITIALIZATION & LISTENERS  ---
 
 el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
 
-// Sync both inputs 
 el.length.addEventListener('input', syncLength);
 el.lengthNum.addEventListener('input', syncLength);
 
@@ -198,9 +196,10 @@ function updateUI() {
     el.tabPass.classList.toggle('active', isPassphrase);
     el.pwdOpts.classList.toggle('hidden', isPassphrase);
     el.passOpts.classList.toggle('hidden', !isPassphrase);
+    
+    // Label Sync 
     el.lengthLabel.textContent = isPassphrase ? "Words" : "Length";
     
-    // Set min/max based on mode 
     if (isPassphrase) {
         el.length.min = el.lengthNum.min = 3;
         el.length.max = el.lengthNum.max = 20;
