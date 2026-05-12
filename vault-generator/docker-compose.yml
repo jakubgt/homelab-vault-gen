@@ -2,8 +2,8 @@ services:
   vault-gen:
     image: nginx:alpine
     container_name: vault-gen
-    network_mode: host # REQUIRED for unprivileged LXC compatibility
-    read_only: true
+    network_mode: host # Explicitly shares host network for unprivileged LXC/Proxmox compatibility
+    read_only: true # Hardens security by preventing changes to the container filesystem
     tmpfs:
       - /var/cache/nginx:mode=777
       - /var/run:mode=777
