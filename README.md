@@ -18,9 +18,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 ---
 
-## 🚀 Deployment 
-
-## 🖥️ Cross-Platform Usage (Windows & Mac)
+## 🖥️ Quick Start (Windows, Mac & Docker)
 
 Because this application is a single static file with zero external dependencies, it does not require a complex web server to run. You can use it on any operating system using one of these three methods:
 
@@ -46,9 +44,11 @@ If you prefer containerization on Windows (via Docker Desktop) or Mac, you can i
     ```bash
       docker run -d -p 8080:80 --name pass-gen -v $(pwd)/index.html:/usr/share/nginx/html/index.html:ro nginx:alpine
       ```
-3. Open your browser and navigate to http://localhost:8080.
+3. Open your browser and navigate to `http://localhost:8080`.
 
-## 🚀 Deployment (Debian/Ubuntu LXC via NGINX)
+---
+
+## 🚀 Advanced Deployment (Debian/Ubuntu LXC via NGINX)
 
 Because this is a static, single-file application, it requires almost zero system resources. It is highly recommended to host this on a dedicated, unprivileged LXC container using NGINX.
 
