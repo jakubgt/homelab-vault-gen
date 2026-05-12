@@ -73,13 +73,13 @@ body {
     user-select: all;
 }
 
-/* Tighter Length Section  */
+/* Tighter, Aligned Length Section */
 .length-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end; /* Vertically aligns label and input box  */
-    margin-bottom: 8px;    /* Tighter spacing to slider  */
-    padding: 0 2px;
+    align-items: center; /* Improved vertical alignment */
+    margin-bottom: 6px;
+    padding: 0 4px;      /* Slight indent from the container edge */
 }
 
 #length-label {
@@ -93,23 +93,26 @@ body {
     height: 28px;
     background: var(--input-bg);
     border: 1px solid var(--border-color);
-    color: var(--accent); /* Highlights the active value  */
+    color: var(--accent);
     padding: 0;
     border-radius: 6px;
     text-align: center;
     font-weight: bold;
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
+    appearance: textfield; /* Hides spin arrows in Firefox */
 }
 
-#length-num:focus {
-    border-color: var(--accent);
+/* Hides spin arrows in Chrome/Safari/Edge */
+#length-num::-webkit-inner-spin-button, 
+#length-num::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
 }
 
 .full-slider {
     width: 100%;
-    margin: 0 0 25px 0; /* Pulls slider closer to text  */
+    margin: 0 0 25px 0;
     cursor: pointer;
     height: 6px;
     border-radius: 3px;
@@ -117,7 +120,6 @@ body {
     background: var(--input-bg);
 }
 
-/* Precision Slider Thumb  */
 .full-slider::-webkit-slider-thumb {
     appearance: none;
     width: 18px;
@@ -128,51 +130,33 @@ body {
     border: 2px solid var(--container-bg);
 }
 
-/* Paranoid Mode Styles */
+/* UI Elements */
+.entropy-meter { margin-bottom: 15px; }
+#entropy-text { font-size: 14px; font-weight: bold; }
+.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+#entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
+
+.tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 15px; }
+.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; }
+.tab-btn.active { opacity: 1; border-bottom: 2px solid var(--accent); font-weight: bold; }
+
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+.action-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; width: 100%; margin-top: 10px; cursor: pointer; font-weight: bold; }
+#copy-btn { background-color: var(--success); }
+
+/* Paranoid Mode & Toast */
 .paranoid-active #result { filter: blur(8px); opacity: 0.5; }
 .paranoid-active #result-container:hover #result { filter: blur(0); opacity: 1; }
-#paranoid-overlay { position: absolute; font-weight: bold; pointer-events: none; }
+#paranoid-overlay { position: absolute; font-weight: bold; pointer-events: none; font-size: 14px; }
 
-/* Copy Flash Animation */
-.copy-flash { animation: flash-border 0.5s; }
-@keyframes flash-border {
-    0% { border-color: var(--border-color); }
-    50% { border-color: var(--success); box-shadow: 0 0 15px var(--success); }
-    100% { border-color: var(--border-color); }
-}
-
-/* Toast Notification */
 #toast {
-    visibility: hidden;
-    min-width: 250px;
-    background-color: var(--accent);
-    color: #fff;
-    text-align: center;
-    border-radius: 8px;
-    padding: 16px;
-    position: fixed;
-    left: 50%;
-    bottom: 30px;
-    transform: translateX(-50%);
-    z-index: 1000;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    visibility: hidden; min-width: 250px; background-color: var(--accent); color: #fff;
+    text-align: center; border-radius: 8px; padding: 16px; position: fixed;
+    left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 1000;
 }
-
-#toast.show {
-    visibility: visible;
-    animation: fadein 0.5s, fadeout 0.5s 2.5s;
-}
-
+#toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
 @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
 @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
 
-/* UI Elements */
-.entropy-bar-container { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
-#entropy-bar { height: 100%; width: 0%; transition: width 0.3s, background 0.3s; }
-.tabs { display: flex; border-bottom: 2px solid var(--border-color); }
-.tab-btn { flex: 1; background: none; border: none; padding: 10px; color: var(--text-color); cursor: pointer; opacity: 0.6; }
-.tab-btn.active { opacity: 1; border-bottom: 2px solid var(--accent); font-weight: bold; }
-.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
-.action-btn { background-color: var(--accent); color: white; border: none; padding: 12px; border-radius: 5px; width: 100%; margin-top: 10px; cursor: pointer; }
-#copy-btn { background-color: var(--success); }
 .hidden { display: none !important; }
+hr { border: 0; border-top: 1px solid var(--border-color); margin: 15px 0; }
