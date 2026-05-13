@@ -28,10 +28,12 @@
         <div class="stats-row">
             <span id="entropy-text">Entropy: 0 bits</span>
             <span id="strength-text" class="strength-weak">Strength: Weak</span>
-            <span id="crack-text">Crack Time: Instant</span>
         </div>
         <div class="entropy-bar-container">
             <div id="entropy-bar"></div>
+        </div>
+        <div class="crack-estimation">
+            <span id="crack-text">Estimated Time to Crack: Instant</span>
         </div>
 
         <div class="controls">
@@ -54,7 +56,7 @@
                 
                 <div class="full-width-opt">
                     <label><input type="checkbox" id="opt-safe"> Terminal / YAML Safe</label>
-                    <div class="opt-desc">Excludes quotes, brackets, and script-breaking symbols</div>
+                    <div class="opt-desc">Restricts pool to (!@#%^*-_=+:./?) to prevent injection or string parsing errors in configuration files and bash scripts.</div>
                 </div>
 
                 <input type="text" id="sym-input" class="full-width-input" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
