@@ -233,7 +233,6 @@ function updateUI() {
         if (currentMode === 'pass') {
             el.length.min = el.lengthNum.min = 3;
             el.length.max = el.lengthNum.max = 20;
-            // Prevent length from shrinking if switching back from pwd with a high length, but cap at 20
             if (el.length.value > 20) el.length.value = el.lengthNum.value = 10;
         } else {
             el.length.min = el.lengthNum.min = 4;
