@@ -33,7 +33,7 @@ const CHARS = {
 const DEFAULT_SYMS = "!@#$%^&*()-_=+[]{};:,.<>/?|~";
 const SAFE_SYMS = "!@#%^*-_=+:./?";
 
-let currentMode = 'pwd'; // 'pwd', 'pass', 'user'
+let currentMode = 'pwd'; // Always default to Password on load
 let clearTimer;
 
 // --- DUAL-SYNC LENGTH LOGIC ---
@@ -263,7 +263,7 @@ function saveSettings() {
     if (document.getElementById('opt-paranoid').checked) return; // Zero-persistence in paranoid mode
     
     const settings = {
-        mode: currentMode,
+        // Tab state tracking removed so it always defaults to "Password"
         length: el.length.value,
         clearTime: el.clearTime.value,
         customClearTime: el.customClearTime.value,
@@ -292,7 +292,7 @@ function loadSettings() {
         
         const saved = JSON.parse(localStorage.getItem('vault_settings'));
         if (saved) {
-            if (saved.mode) currentMode = saved.mode;
+            // Tab state loading removed
             el.length.value = el.lengthNum.value = saved.length || 24;
             
             if (saved.clearTime !== undefined) {
