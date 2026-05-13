@@ -56,10 +56,16 @@
                 
                 <div class="full-width-opt">
                     <label><input type="checkbox" id="opt-safe"> Terminal / YAML Safe</label>
-                    <div class="opt-desc">Restricts pool to (!@#%^*-_=+:./?) to prevent injection or string parsing errors in configuration files and bash scripts.</div>
+                    <div class="opt-desc">Excludes quotes, brackets, and script-breaking symbols</div>
                 </div>
 
-                <input type="text" id="sym-input" class="full-width-input" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
+                <div class="full-width-opt custom-sym-container">
+                    <label for="sym-input" class="sym-label">Custom Symbol Pool</label>
+                    <div class="opt-desc" style="margin-left: 0; margin-bottom: 5px;">
+                        Add or omit specific characters to meet strict password requirements.
+                    </div>
+                    <input type="text" id="sym-input" class="full-width-input" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
+                </div>
             </div>
 
             <div id="pass-options" class="options-grid hidden">
@@ -91,7 +97,7 @@
 
             <div class="setting-row">
                 <label><input type="checkbox" id="opt-paranoid"> <strong>Paranoid Mode</strong><br>
-                <small>No saving, clears on blur, hides text</small></label>
+                <small>Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</small></label>
             </div>
 
             <div class="setting-row" style="margin-top: 10px;">
