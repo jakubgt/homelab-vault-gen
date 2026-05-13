@@ -1,9 +1,13 @@
 services:
   vault-gen:
-    image: nginx:alpine
+    image: nginxinc/nginx-unprivileged:alpine
     container_name: vault-gen
     network_mode: host 
     read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /var/cache/nginx:mode=777
       - /var/run:mode=777
