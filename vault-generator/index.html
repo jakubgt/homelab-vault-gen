@@ -62,11 +62,9 @@
                 </div>
 
                 <div class="full-width-opt custom-sym-container">
-                    <label for="sym-input" class="sym-label">Custom Symbol Pool</label>
-                    <div class="opt-desc" style="margin-left: 0; margin-bottom: 5px;">
-                        Add or omit specific characters to meet strict password requirements.
-                    </div>
-                    <input type="text" id="sym-input" class="full-width-input" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
+                    <label><input type="checkbox" id="opt-custom-syms"> Custom Symbol Pool</label>
+                    <div class="opt-desc">Add or omit specific characters to meet strict password requirements.</div>
+                    <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
                 </div>
             </div>
 
@@ -97,9 +95,9 @@
 
             <hr>
 
-            <div class="setting-row">
-                <label><input type="checkbox" id="opt-paranoid"> <strong>Paranoid Mode</strong><br>
-                <small>Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</small></label>
+            <div class="full-width-opt" style="margin-bottom: 15px;">
+                <label><input type="checkbox" id="opt-paranoid"> Paranoid Mode</label>
+                <div class="opt-desc">Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</div>
             </div>
 
             <div class="setting-row" style="margin-top: 10px; display: flex; align-items: center;">
