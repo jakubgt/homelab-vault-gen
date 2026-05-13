@@ -183,7 +183,7 @@ function calculateEntropyAndStrength() {
     } else if (seconds < 3.15e11) { 
         strength = "Strong"; crackTime = "Centuries"; colorClass = "strength-strong"; barColor = "#20c997";
     } else {
-        strength = "Very Strong"; crackTime = "Indefinite"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
+        strength = "Very Strong"; crackTime = "Infinite"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
     }
 
     el.strengthText.textContent = `Strength: ${strength}`;
