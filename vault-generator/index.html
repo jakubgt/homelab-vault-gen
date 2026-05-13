@@ -100,13 +100,15 @@
                 <small>Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</small></label>
             </div>
 
-            <div class="setting-row" style="margin-top: 10px;">
+            <div class="setting-row" style="margin-top: 10px; display: flex; align-items: center;">
                 <label for="clear-time">Auto-Clear:</label>
                 <select id="clear-time" style="margin-left: 10px; padding: 2px;">
                     <option value="30000">30 Seconds</option>
                     <option value="60000" selected>60 Seconds</option>
                     <option value="300000">5 Minutes</option>
+                    <option value="custom">Custom...</option>
                 </select>
+                <input type="number" id="custom-clear-time" class="hidden" min="1" placeholder="Secs" style="width: 70px; margin-left: 5px; padding: 2px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
             </div>
         </div>
 
