@@ -5,6 +5,7 @@ const el = {
     lengthNum: document.getElementById('length-num'),
     lengthLabel: document.getElementById('length-label'),
     lengthContainer: document.getElementById('length-container'),
+    metricsContainer: document.getElementById('metrics-container'), // NEW
     generateBtn: document.getElementById('generate-btn'),
     copyBtn: document.getElementById('copy-btn'),
     themeBtn: document.getElementById('theme-btn'),
@@ -65,7 +66,7 @@ function generate() {
     else if (currentMode === 'pass') generatePassphrase();
     else if (currentMode === 'user') generateUsername();
     
-    calculateEntropyAndStrength();
+    if (currentMode !== 'user') calculateEntropyAndStrength();
 }
 
 function generatePassword() {
@@ -147,11 +148,6 @@ function calculateEntropyAndStrength() {
         if (document.getElementById('opt-pass-caps').checked) combinations *= 2;
         if (document.getElementById('opt-pass-nums').checked) combinations *= 10;
         entropy = len * Math.log2(combinations);
-    } else if (currentMode === 'user') {
-        entropy = 2 * Math.log2(WORDS.length);
-        if (document.getElementById('opt-user-nums').checked) {
-            entropy += Math.log2(1000); 
-        }
     } else {
         let poolSize = 0;
         if (document.getElementById('opt-upper').checked) poolSize += 26;
@@ -235,9 +231,11 @@ function updateUI() {
     if (currentMode === 'user') {
         el.lengthContainer.classList.add('hidden');
         el.length.classList.add('hidden');
+        el.metricsContainer.classList.add('hidden'); // Hides Entropy, Strength, Time, & Bar
     } else {
         el.lengthContainer.classList.remove('hidden');
         el.length.classList.remove('hidden');
+        el.metricsContainer.classList.remove('hidden'); // Shows them back
         
         el.lengthLabel.textContent = currentMode === 'pass' ? "Words" : "Length";
         if (currentMode === 'pass') {
