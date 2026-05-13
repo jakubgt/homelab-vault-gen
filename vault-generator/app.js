@@ -187,7 +187,7 @@ function calculateEntropyAndStrength() {
 
     el.strengthText.textContent = `Strength: ${strength}`;
     el.strengthText.className = colorClass;
-    el.crackText.textContent = `Crack Time: ${crackTime}`;
+    el.crackText.textContent = `Estimated Time to Crack: ${crackTime}`;
     el.entropyBar.style.backgroundColor = barColor;
 }
 
