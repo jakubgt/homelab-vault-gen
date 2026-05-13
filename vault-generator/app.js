@@ -80,7 +80,6 @@ function generatePassword() {
         let symPool = el.symInput.value;
         if (symPool) {
             pool += symPool;
-            // Treat the custom string as an array of characters for validation
             activeSets.push(symPool);
         }
     }
@@ -120,7 +119,6 @@ function generatePassphrase() {
 }
 
 function generateUsername() {
-    // Standard Username: Word + Separator + Word (+ optional number)
     let w1 = WORDS[getSecureRandomInt(WORDS.length)];
     let w2 = WORDS[getSecureRandomInt(WORDS.length)];
     
@@ -132,7 +130,6 @@ function generateUsername() {
     
     if (document.getElementById('opt-user-nums').checked) {
         let num = getSecureRandomInt(1000).toString().padStart(3, '0');
-        // If a separator is used, append it before the number too (optional aesthetic choice)
         result += sep ? sep + num : num;
     }
     
@@ -150,10 +147,9 @@ function calculateEntropyAndStrength() {
         if (document.getElementById('opt-pass-nums').checked) combinations *= 10;
         entropy = len * Math.log2(combinations);
     } else if (currentMode === 'user') {
-        // 2 Words = log2(7776^2) = 25.85
         entropy = 2 * Math.log2(WORDS.length);
         if (document.getElementById('opt-user-nums').checked) {
-            entropy += Math.log2(1000); // 3 digits = 1000 combos = ~9.96 bits
+            entropy += Math.log2(1000); 
         }
     } else {
         let poolSize = 0;
@@ -161,18 +157,15 @@ function calculateEntropyAndStrength() {
         if (document.getElementById('opt-lower').checked) poolSize += 26;
         if (document.getElementById('opt-nums').checked) poolSize += 10;
         if (document.getElementById('opt-syms').checked) {
-            // Remove duplicates from custom symbol pool length
             const uniqueSyms = new Set(el.symInput.value.split('')).size;
             poolSize += uniqueSyms;
         }
         entropy = len * Math.log2(poolSize || 1);
     }
     
-    // Update UI
     el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
     el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
     
-    // Calculate Strength & Crack Time (Assuming offline fast hash at 10 billion guesses/sec)
     let strength = "Weak";
     let crackTime = "Instant";
     let colorClass = "strength-weak";
@@ -182,11 +175,11 @@ function calculateEntropyAndStrength() {
 
     if (entropy < 40) {
         strength = "Weak"; crackTime = "Instant"; colorClass = "strength-weak"; barColor = "#dc3545";
-    } else if (seconds < 86400) { // Less than a day
+    } else if (seconds < 86400) { 
         strength = "Fair"; crackTime = "Hours"; colorClass = "strength-fair"; barColor = "#fd7e14";
-    } else if (seconds < 31536000) { // Less than a year
+    } else if (seconds < 31536000) { 
         strength = "Good"; crackTime = "Days"; colorClass = "strength-good"; barColor = "#28a745";
-    } else if (seconds < 3.15e11) { // Less than 10,000 years
+    } else if (seconds < 3.15e11) { 
         strength = "Strong"; crackTime = "Centuries"; colorClass = "strength-strong"; barColor = "#20c997";
     } else {
         strength = "Very Strong"; crackTime = "Indefinite"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
@@ -229,7 +222,6 @@ function updateUI() {
     el.passOpts.classList.toggle('hidden', currentMode !== 'pass');
     el.userOpts.classList.toggle('hidden', currentMode !== 'user');
     
-    // Hide length controls for Username generation
     if (currentMode === 'user') {
         el.lengthContainer.classList.add('hidden');
         el.length.classList.add('hidden');
