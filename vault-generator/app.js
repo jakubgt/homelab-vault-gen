@@ -147,9 +147,23 @@ function generatePassphrase() {
 
     if (document.getElementById('opt-pass-nums').checked) {
         let numCount = +document.getElementById('pass-num-count').value;
-        for (let i = 0; i < numCount; i++) {
-            let targetIdx = getSecureRandomInt(phrase.length);
-            phrase[targetIdx] += getSecureRandomInt(10);
+        let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
+        
+        if (randomizePositions) {
+            // Sprinkle numbers randomly across the whole phrase
+            for (let i = 0; i < numCount; i++) {
+                let targetIdx = getSecureRandomInt(phrase.length);
+                phrase[targetIdx] += getSecureRandomInt(10);
+            }
+        } else {
+            // Append exactly numCount to EVERY word in the phrase
+            for (let i = 0; i < phrase.length; i++) {
+                let nums = "";
+                for (let j = 0; j < numCount; j++) {
+                    nums += getSecureRandomInt(10);
+                }
+                phrase[i] += nums;
+            }
         }
     }
 
@@ -193,7 +207,17 @@ function calculateEntropyAndStrength() {
         }
         if (document.getElementById('opt-pass-nums').checked) {
             let numCount = +document.getElementById('pass-num-count').value;
-            entropy += numCount * Math.log2(10); 
+            let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
+            
+            if (randomizePositions) {
+                // Entropy of the randomly sprinkled digits
+                entropy += numCount * Math.log2(10); 
+                // Positional entropy based on word length choices
+                entropy += numCount * Math.log2(lengths.pass);
+            } else {
+                // If appending to EVERY word, we generate `numCount * lengths.pass` total random digits
+                entropy += (numCount * lengths.pass) * Math.log2(10);
+            }
         }
     } else {
         let poolSize = 0;
@@ -243,7 +267,28 @@ function showToast(message) {
     setTimeout(() => { toast.className = ''; }, 3000);
 }
 
+// Fallback for non-HTTPS homelab environments
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+        document.execCommand('copy');
+    } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+    }
+    document.body.removeChild(textArea);
+}
+
 function triggerCopyFeedback() {
+    const textToCopy = el.result.textContent;
+    if (!textToCopy) return; // Prevent copying empty strings
+
     let delay;
     if (el.clearTime.value === 'custom') {
         let customSecs = parseInt(el.customClearTime.value);
@@ -253,25 +298,43 @@ function triggerCopyFeedback() {
         delay = parseInt(el.clearTime.value);
     }
 
-    navigator.clipboard.writeText(el.result.textContent).then(() => {
+    const onSuccess = () => {
         showToast(`Copied! Clearing in ${delay/1000}s`);
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
         clearTimeout(clearTimer);
         clearTimer = setTimeout(() => {
-            // Overwrite with garbage data first, then clear, to defeat clipboard history managers
-            navigator.clipboard.writeText("00000000000000000000000000000000").then(() => {
-                setTimeout(() => navigator.clipboard.writeText(""), 50);
-            }).catch(() => {});
+            // Overwrite with garbage data first, then clear
+            const garbage = "00000000000000000000000000000000";
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(garbage).then(() => {
+                    setTimeout(() => navigator.clipboard.writeText(""), 50);
+                }).catch(() => {});
+            } else {
+                fallbackCopyTextToClipboard(garbage);
+                setTimeout(() => fallbackCopyTextToClipboard(""), 50);
+            }
 
             el.copyBtn.textContent = "Copy";
             showToast("Clipboard cleared.");
         }, delay);
-    });
+    };
+
+    // Attempt modern async clipboard first, fallback to execCommand for HTTP/IP access
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(err => {
+            console.error('Async: Could not copy text: ', err);
+            fallbackCopyTextToClipboard(textToCopy);
+            onSuccess();
+        });
+    } else {
+        fallbackCopyTextToClipboard(textToCopy);
+        onSuccess();
+    }
 }
 
 function toggleNestedInputs() {
     document.getElementById('opt-pass-caps-rand-wrapper').classList.toggle('hidden', !document.getElementById('opt-pass-caps').checked);
-    document.getElementById('pass-num-count-wrapper').classList.toggle('hidden', !document.getElementById('opt-pass-nums').checked);
+    document.getElementById('pass-num-options-wrapper').classList.toggle('hidden', !document.getElementById('opt-pass-nums').checked);
     document.getElementById('user-num-count-wrapper').classList.toggle('hidden', !document.getElementById('opt-user-nums').checked);
 }
 
@@ -340,6 +403,7 @@ function saveSettings() {
         passCaps: document.getElementById('opt-pass-caps').checked,
         passCapsRand: document.getElementById('opt-pass-caps-rand').checked,
         passNums: document.getElementById('opt-pass-nums').checked,
+        passNumsRand: document.getElementById('opt-pass-nums-rand').checked,
         passNumCount: document.getElementById('pass-num-count').value,
         passSep: document.getElementById('opt-pass-sep').value,
         userNums: document.getElementById('opt-user-nums').checked,
@@ -382,6 +446,7 @@ function loadSettings() {
             if (saved.passCaps !== undefined) document.getElementById('opt-pass-caps').checked = saved.passCaps;
             if (saved.passCapsRand !== undefined) document.getElementById('opt-pass-caps-rand').checked = saved.passCapsRand;
             if (saved.passNums !== undefined) document.getElementById('opt-pass-nums').checked = saved.passNums;
+            if (saved.passNumsRand !== undefined) document.getElementById('opt-pass-nums-rand').checked = saved.passNumsRand;
             if (saved.passNumCount !== undefined) document.getElementById('pass-num-count').value = saved.passNumCount;
             if (saved.passSep !== undefined) document.getElementById('opt-pass-sep').value = saved.passSep;
             
@@ -397,7 +462,11 @@ function loadSettings() {
 // --- LISTENERS ---
 el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
+
+// Both buttons now trigger the updated fallback-enabled copy function
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
+el.resultContainer.addEventListener('click', triggerCopyFeedback); 
+
 el.length.addEventListener('input', syncLength);
 el.lengthNum.addEventListener('input', syncLength);
 
