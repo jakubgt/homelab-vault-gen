@@ -100,10 +100,13 @@ apt install nginx git ufw -y
 ```bash
 # Clear old files and pull the generator
 rm -rf /var/www/html/*
-git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
+git clone [https://github.com/jakubgt/homelab-vault-gen.git](https://github.com/jakubgt/homelab-vault-gen.git) /tmp/passgen
 
-# Ensure files land in the ROOT of /var/www/html, not a subfolder
+# Copy files and force them into the ROOT of /var/www/html (flattening any subfolders)
 cp -r /tmp/passgen/* /var/www/html/
+mv /var/www/html/*/* /var/www/html/ 2>/dev/null
+
+# Clean up temp files
 rm -rf /tmp/passgen
 
 echo "Deployment complete!"
@@ -113,8 +116,8 @@ echo "Deployment complete!"
 Ensure the web server can only read the files, never modify it:
 ```bash
 chown -R www-data:www-data /var/www/html
-find /var/www/html -type d -exec chmod 555 {} \;
-find /var/www/html -type f -exec chmod 444 {} \;
+find /var/www/html -type d -exec chmod 755 {} \;
+find /var/www/html -type f -exec chmod 644 {} \;
 ```
 
 ### 4. Hardening (Optional but Recommended)
@@ -145,6 +148,11 @@ ufw allow 80/tcp
 ufw enable
 ```
 > 💡 **LXC/Proxmox Note:** If running in an unprivileged container, the included Docker config uses `network_mode: host`. This ensures the web server can bind to the network correctly without complex bridge configurations.
+
+### 5. Enable Auto-Start on Boot:
+```bash
+systemctl enable nginx
+```
 
 ## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
