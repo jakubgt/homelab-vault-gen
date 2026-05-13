@@ -233,6 +233,7 @@ function updateUI() {
         if (currentMode === 'pass') {
             el.length.min = el.lengthNum.min = 3;
             el.length.max = el.lengthNum.max = 20;
+            // Prevent length from shrinking if switching back from pwd with a high length, but cap at 20
             if (el.length.value > 20) el.length.value = el.lengthNum.value = 10;
         } else {
             el.length.min = el.lengthNum.min = 4;
@@ -250,6 +251,62 @@ function toggleTheme() {
     try { localStorage.setItem('vault_theme', isDark ? 'dark' : 'light'); } catch (e) {}
 }
 
+// --- PERSISTENT SETTINGS ---
+function saveSettings() {
+    if (document.getElementById('opt-paranoid').checked) return; // Zero-persistence in paranoid mode
+    
+    const settings = {
+        mode: currentMode,
+        length: el.length.value,
+        clearTime: el.clearTime.value,
+        upper: document.getElementById('opt-upper').checked,
+        lower: document.getElementById('opt-lower').checked,
+        nums: document.getElementById('opt-nums').checked,
+        syms: document.getElementById('opt-syms').checked,
+        ambig: document.getElementById('opt-ambig').checked,
+        safe: document.getElementById('opt-safe').checked,
+        passCaps: document.getElementById('opt-pass-caps').checked,
+        passNums: document.getElementById('opt-pass-nums').checked,
+        passSep: document.getElementById('opt-pass-sep').value,
+        userNums: document.getElementById('opt-user-nums').checked,
+        userSep: document.getElementById('opt-user-sep').value,
+        symPool: el.symInput.value
+    };
+    try { localStorage.setItem('vault_settings', JSON.stringify(settings)); } catch(e) {}
+}
+
+function loadSettings() {
+    try {
+        if (localStorage.getItem('vault_theme') === 'dark') {
+            document.body.classList.add('dark-mode');
+            el.themeBtn.textContent = '☀️';
+        }
+        
+        const saved = JSON.parse(localStorage.getItem('vault_settings'));
+        if (saved) {
+            if (saved.mode) currentMode = saved.mode;
+            el.length.value = el.lengthNum.value = saved.length || 24;
+            el.clearTime.value = saved.clearTime || "60000";
+            
+            if (saved.upper !== undefined) document.getElementById('opt-upper').checked = saved.upper;
+            if (saved.lower !== undefined) document.getElementById('opt-lower').checked = saved.lower;
+            if (saved.nums !== undefined) document.getElementById('opt-nums').checked = saved.nums;
+            if (saved.syms !== undefined) document.getElementById('opt-syms').checked = saved.syms;
+            if (saved.ambig !== undefined) document.getElementById('opt-ambig').checked = saved.ambig;
+            if (saved.safe !== undefined) document.getElementById('opt-safe').checked = saved.safe;
+            
+            if (saved.passCaps !== undefined) document.getElementById('opt-pass-caps').checked = saved.passCaps;
+            if (saved.passNums !== undefined) document.getElementById('opt-pass-nums').checked = saved.passNums;
+            if (saved.passSep !== undefined) document.getElementById('opt-pass-sep').value = saved.passSep;
+            
+            if (saved.userNums !== undefined) document.getElementById('opt-user-nums').checked = saved.userNums;
+            if (saved.userSep !== undefined) document.getElementById('opt-user-sep').value = saved.userSep;
+            
+            if (saved.symPool !== undefined) el.symInput.value = saved.symPool;
+        }
+    } catch(e) {}
+}
+
 // --- LISTENERS ---
 el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
@@ -257,9 +314,9 @@ el.copyBtn.addEventListener('click', triggerCopyFeedback);
 el.length.addEventListener('input', syncLength);
 el.lengthNum.addEventListener('input', syncLength);
 
-el.tabPwd.addEventListener('click', () => { currentMode = 'pwd'; updateUI(); });
-el.tabPass.addEventListener('click', () => { currentMode = 'pass'; updateUI(); });
-el.tabUser.addEventListener('click', () => { currentMode = 'user'; updateUI(); });
+el.tabPwd.addEventListener('click', () => { currentMode = 'pwd'; updateUI(); saveSettings(); });
+el.tabPass.addEventListener('click', () => { currentMode = 'pass'; updateUI(); saveSettings(); });
+el.tabUser.addEventListener('click', () => { currentMode = 'user'; updateUI(); saveSettings(); });
 
 // Handle Safe Only Characters Toggle
 document.getElementById('opt-safe').addEventListener('change', (e) => {
@@ -271,10 +328,14 @@ document.getElementById('opt-safe').addEventListener('change', (e) => {
     generate();
 });
 
-// Regenerate immediately if any options change
-document.querySelectorAll('.options-grid input, .options-grid select').forEach(input => {
-    input.addEventListener('input', generate);
-    input.addEventListener('change', generate);
+// Regenerate and Save immediately if any options change
+document.querySelectorAll('input, select').forEach(input => {
+    if (input.type === 'range' || input.type === 'number') {
+        input.addEventListener('change', saveSettings); 
+    } else {
+        input.addEventListener('input', () => { generate(); saveSettings(); });
+        input.addEventListener('change', () => { generate(); saveSettings(); });
+    }
 });
 
 document.getElementById('opt-paranoid').addEventListener('change', (e) => {
@@ -289,11 +350,5 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Init
-try {
-    if (localStorage.getItem('vault_theme') === 'dark') {
-        document.body.classList.add('dark-mode');
-        el.themeBtn.textContent = '☀️';
-    }
-} catch (e) {}
-
+loadSettings();
 updateUI();
