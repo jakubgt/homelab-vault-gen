@@ -5,7 +5,7 @@ const el = {
     lengthNum: document.getElementById('length-num'),
     lengthLabel: document.getElementById('length-label'),
     lengthContainer: document.getElementById('length-container'),
-    metricsContainer: document.getElementById('metrics-container'), // NEW
+    metricsContainer: document.getElementById('metrics-container'),
     generateBtn: document.getElementById('generate-btn'),
     copyBtn: document.getElementById('copy-btn'),
     themeBtn: document.getElementById('theme-btn'),
@@ -22,6 +22,7 @@ const el = {
     passOpts: document.getElementById('pass-options'),
     userOpts: document.getElementById('user-options'),
     symInput: document.getElementById('sym-input'),
+    optCustomSyms: document.getElementById('opt-custom-syms'), // NEW
     paranoidOverlay: document.getElementById('paranoid-overlay')
 };
 
@@ -273,6 +274,7 @@ function saveSettings() {
         syms: document.getElementById('opt-syms').checked,
         ambig: document.getElementById('opt-ambig').checked,
         safe: document.getElementById('opt-safe').checked,
+        customSyms: el.optCustomSyms.checked,
         passCaps: document.getElementById('opt-pass-caps').checked,
         passNums: document.getElementById('opt-pass-nums').checked,
         passSep: document.getElementById('opt-pass-sep').value,
@@ -308,6 +310,11 @@ function loadSettings() {
             if (saved.ambig !== undefined) document.getElementById('opt-ambig').checked = saved.ambig;
             if (saved.safe !== undefined) document.getElementById('opt-safe').checked = saved.safe;
             
+            if (saved.customSyms !== undefined) {
+                el.optCustomSyms.checked = saved.customSyms;
+                el.symInput.classList.toggle('hidden', !saved.customSyms);
+            }
+
             if (saved.passCaps !== undefined) document.getElementById('opt-pass-caps').checked = saved.passCaps;
             if (saved.passNums !== undefined) document.getElementById('opt-pass-nums').checked = saved.passNums;
             if (saved.passSep !== undefined) document.getElementById('opt-pass-sep').value = saved.passSep;
@@ -337,6 +344,16 @@ el.clearTime.addEventListener('change', (e) => {
     saveSettings();
 });
 el.customClearTime.addEventListener('input', saveSettings);
+
+// Handle Custom Symbols Reveal
+el.optCustomSyms.addEventListener('change', (e) => {
+    el.symInput.classList.toggle('hidden', !e.target.checked);
+    if (!e.target.checked) {
+        el.symInput.value = document.getElementById('opt-safe').checked ? SAFE_SYMS : DEFAULT_SYMS;
+    }
+    generate();
+    saveSettings();
+});
 
 // Handle Safe Only Characters Toggle
 document.getElementById('opt-safe').addEventListener('change', (e) => {
