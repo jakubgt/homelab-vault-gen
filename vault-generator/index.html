@@ -69,8 +69,20 @@
             </div>
 
             <div id="pass-options" class="options-grid hidden">
-                <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize Words</label>
-                <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize Words</label>
+                    <div id="opt-pass-caps-rand-wrapper" style="margin-left: 24px; font-size: 13px;">
+                        <label><input type="checkbox" id="opt-pass-caps-rand"> Randomize</label>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
+                    <div id="pass-num-count-wrapper" class="hidden" style="margin-left: 24px; font-size: 13px; display: flex; align-items: center; gap: 5px;">
+                        Amount: <input type="number" id="pass-num-count" min="1" max="10" value="2" class="small-input">
+                    </div>
+                </div>
+
                 <label class="full-width-opt">Separator: 
                     <select id="opt-pass-sep" style="margin-left: 10px; padding: 2px;">
                         <option value="-">Hyphen (-)</option>
@@ -82,15 +94,23 @@
             </div>
 
             <div id="user-options" class="options-grid hidden">
-                <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
-                <label class="full-width-opt">Separator: 
-                    <select id="opt-user-sep" style="margin-left: 10px; padding: 2px;">
-                        <option value="">None</option>
-                        <option value="-">Hyphen (-)</option>
-                        <option value="_">Underscore (_)</option>
-                        <option value=".">Period (.)</option>
-                    </select>
-                </label>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
+                    <div id="user-num-count-wrapper" style="margin-left: 24px; font-size: 13px; display: flex; align-items: center; gap: 5px;">
+                        Amount: <input type="number" id="user-num-count" min="1" max="9" value="3" class="small-input">
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+                    <label style="display: flex; align-items: center;">Separator: 
+                        <select id="opt-user-sep" style="margin-left: 10px; padding: 2px;">
+                            <option value="">None</option>
+                            <option value="-">Hyphen (-)</option>
+                            <option value="_">Underscore (_)</option>
+                            <option value=".">Period (.)</option>
+                        </select>
+                    </label>
+                </div>
             </div>
 
             <hr>
