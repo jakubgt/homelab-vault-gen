@@ -9,6 +9,7 @@ const el = {
     copyBtn: document.getElementById('copy-btn'),
     themeBtn: document.getElementById('theme-btn'),
     clearTime: document.getElementById('clear-time'),
+    customClearTime: document.getElementById('custom-clear-time'),
     entropyText: document.getElementById('entropy-text'),
     strengthText: document.getElementById('strength-text'),
     crackText: document.getElementById('crack-text'),
@@ -200,7 +201,16 @@ function showToast(message) {
 }
 
 function triggerCopyFeedback() {
-    const delay = parseInt(el.clearTime.value);
+    let delay;
+    
+    if (el.clearTime.value === 'custom') {
+        let customSecs = parseInt(el.customClearTime.value);
+        if (isNaN(customSecs) || customSecs <= 0) customSecs = 60; // Fallback to 60s if invalid
+        delay = customSecs * 1000;
+    } else {
+        delay = parseInt(el.clearTime.value);
+    }
+
     navigator.clipboard.writeText(el.result.textContent).then(() => {
         showToast(`Copied! Clearing in ${delay/1000}s`);
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
@@ -258,6 +268,7 @@ function saveSettings() {
         mode: currentMode,
         length: el.length.value,
         clearTime: el.clearTime.value,
+        customClearTime: el.customClearTime.value,
         upper: document.getElementById('opt-upper').checked,
         lower: document.getElementById('opt-lower').checked,
         nums: document.getElementById('opt-nums').checked,
@@ -285,7 +296,12 @@ function loadSettings() {
         if (saved) {
             if (saved.mode) currentMode = saved.mode;
             el.length.value = el.lengthNum.value = saved.length || 24;
-            el.clearTime.value = saved.clearTime || "60000";
+            
+            if (saved.clearTime !== undefined) {
+                el.clearTime.value = saved.clearTime;
+                el.customClearTime.classList.toggle('hidden', saved.clearTime !== 'custom');
+            }
+            if (saved.customClearTime !== undefined) el.customClearTime.value = saved.customClearTime;
             
             if (saved.upper !== undefined) document.getElementById('opt-upper').checked = saved.upper;
             if (saved.lower !== undefined) document.getElementById('opt-lower').checked = saved.lower;
@@ -316,6 +332,13 @@ el.lengthNum.addEventListener('input', syncLength);
 el.tabPwd.addEventListener('click', () => { currentMode = 'pwd'; updateUI(); saveSettings(); });
 el.tabPass.addEventListener('click', () => { currentMode = 'pass'; updateUI(); saveSettings(); });
 el.tabUser.addEventListener('click', () => { currentMode = 'user'; updateUI(); saveSettings(); });
+
+// Handle Custom Timer Reveal
+el.clearTime.addEventListener('change', (e) => {
+    el.customClearTime.classList.toggle('hidden', e.target.value !== 'custom');
+    saveSettings();
+});
+el.customClearTime.addEventListener('input', saveSettings);
 
 // Handle Safe Only Characters Toggle
 document.getElementById('opt-safe').addEventListener('change', (e) => {
