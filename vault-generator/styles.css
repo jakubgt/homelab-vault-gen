@@ -127,6 +127,13 @@ h2 { margin-top: 0; margin-bottom: 15px; }
 /* Options Grid */
 .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; margin-bottom: 10px; }
 .full-width-opt { grid-column: 1 / -1; margin-top: 4px; }
+.opt-desc {
+    font-size: 12px;
+    color: var(--text-color);
+    opacity: 0.6;
+    margin-left: 24px;
+    margin-top: 2px;
+}
 .full-width-input {
     grid-column: 1 / -1;
     width: 100%;
