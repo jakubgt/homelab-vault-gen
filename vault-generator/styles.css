@@ -164,7 +164,8 @@ h2 { margin-top: 0; margin-bottom: 15px; }
 /* Paranoid Mode & Toast */
 .paranoid-active #result { filter: blur(8px); opacity: 0.5; }
 .paranoid-active #result-container:hover #result { filter: blur(0); opacity: 1; }
-#paranoid-overlay { position: absolute; font-weight: bold; pointer-events: none; font-size: 14px; }
+#paranoid-overlay { position: absolute; font-weight: bold; pointer-events: none; font-size: 14px; transition: opacity 0.2s; }
+.paranoid-active #result-container:hover #paranoid-overlay { opacity: 0; } /* Fixes the text overlap issue */
 
 #toast {
     visibility: hidden; min-width: 250px; background-color: var(--accent); color: #fff;
