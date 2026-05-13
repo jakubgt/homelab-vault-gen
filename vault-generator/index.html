@@ -47,7 +47,10 @@
                 <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
                 <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
                 
-                <label class="full-width-opt"><input type="checkbox" id="opt-ambig"> Avoid Ambiguous (lI1O0)</label>
+                <div class="full-width-opt">
+                    <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous Characters</label>
+                    <div class="opt-desc">Excludes visually similar letters and numbers (l, I, 1, O, 0)</div>
+                </div>
                 
                 <div class="full-width-opt">
                     <label><input type="checkbox" id="opt-safe"> Terminal / YAML Safe</label>
