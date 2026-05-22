@@ -1,5 +1,8 @@
 # 🔐 Homelab Vault: Secure Offline Password & Passphrase Generator
 
+![tests](https://github.com/jakubgt/homelab-vault-gen/actions/workflows/tests.yml/badge.svg)
+![license](https://img.shields.io/badge/license-MIT-blue.svg)
+
 A hyper-secure, offline password and diceware generator built specifically for self-hosting in a homelab environment. 
 
 Unlike many online generators or complex Webpack-compiled tools, this generator uses pure Vanilla JavaScript and relies strictly on the Web Crypto API. It has been architecturally hardened to support a bulletproof Content Security Policy (CSP) with zero inline scripts or styles. It is designed to be hosted locally, completely air-gapped from the internet, with zero external dependencies, CDNs, or trackers.
@@ -16,16 +19,16 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
     * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
 * **Character Class Guarantees & Custom Symbols:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password. 
     * Includes a **Custom Symbol Pool** input and a **"Safe Symbols" Toggle** to quickly filter out characters commonly rejected by legacy systems (e.g., brackets, quotes).
-* **Advanced Entropy & Crack-Time Meter:** Accurately calculates true bit-entropy using the following formula:
+* **Advanced Entropy & Crack-Time Meter:** Calculates bit-entropy from charset size and length:
   $$H = L \cdot \log_{2}(N)$$
-  Where $L$ is length and $N$ is the charset size. The meter dynamically displays plain-English **Strength Classifications** and estimates **Time to Crack** (based on a modern cracking speed of 100 billion guesses per second).
+  Where $L$ is length and $N$ is the charset size. For passphrase mode the meter deliberately rounds **conservative** (it does not count entropy an attacker could infer from the visible output structure), so the displayed number is a floor, not a ceiling. The meter dynamically displays plain-English **Strength Classifications** and estimates **Time to Crack** (based on a modern cracking speed of 100 billion guesses per second).
 * **Paranoid Mode & Memory Wiping:**
     * **Visual Privacy:** Blurs the password on-screen until hovered.
     * **Auto-Clear:** Automatically clears the DOM and resets results if you switch browser tabs, minimize, or close the window.
     * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains.
 * **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
-* **Precision Length Controls:** Features a dual-sync manual numeric input and full-width slider, allowing for exact character or word counts from 4 to 128.
+* **Precision Length Controls:** Features a manual numeric input and full-width slider for exact counts — characters (4–128) in password mode, words in passphrase (3–20) and username (1–10) modes.
 
 ---
 
@@ -70,16 +73,16 @@ The repository includes a hardened NGINX configuration and a `docker-compose.yml
    ```bash
    docker compose up -d
    ```
-4. Access the generator at http://localhost (or your server's IP)
+4. Access the generator at http://localhost:8080 (or your server's IP)
+
+> 💡 The container uses `network_mode: host` and the unprivileged NGINX image listens on port **8080**, so no bridge configuration is needed. Adjust your firewall accordingly if you expose it on the network.
 
 ### Method 3: Python Local Server (Quick Network Access)
 If you want to quickly host the generator on your machine so other local devices can access it:
 
-Open your Terminal or Command Prompt.
-
-Navigate to the repository folder.
-
-Run the built-in HTTP server:
+1. Open your Terminal or Command Prompt.
+2. Navigate to the repository folder.
+3. Run the built-in HTTP server:
    ```bash
    python3 -m http.server 8000
    ```
@@ -89,7 +92,7 @@ Run the built-in HTTP server:
 ### 🚀 Advanced Deployment (Homelab Standard - Recommended)
 It is highly recommended to host this on a dedicated, unprivileged Debian/Ubuntu LXC container using NGINX to take advantage of the strict CSP headers.
 
-1. Prepare the Environment
+### 1. Prepare the Environment
 Update your system and install NGINX and Git:
 ```bash
 apt update && apt upgrade -y
@@ -100,11 +103,10 @@ apt install nginx git ufw -y
 ```bash
 # Clear old files and pull the generator
 rm -rf /var/www/html/*
-git clone [https://github.com/jakubgt/homelab-vault-gen.git](https://github.com/jakubgt/homelab-vault-gen.git) /tmp/passgen
+git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy files and force them into the ROOT of /var/www/html (flattening any subfolders)
+# Copy the files into the web root
 cp -r /tmp/passgen/* /var/www/html/
-mv /var/www/html/*/* /var/www/html/ 2>/dev/null
 
 # Clean up temp files
 rm -rf /tmp/passgen
@@ -147,12 +149,28 @@ ufw default allow outgoing
 ufw allow 80/tcp
 ufw enable
 ```
-> 💡 **LXC/Proxmox Note:** If running in an unprivileged container, the included Docker config uses `network_mode: host`. This ensures the web server can bind to the network correctly without complex bridge configurations.
 
-### 5. Enable Auto-Start on Boot:
+### 6. Enable Auto-Start on Boot:
 ```bash
 systemctl enable nginx
 ```
+
+## 🧪 Testing & Verification
+
+This project ships a zero-dependency test suite that *proves* its core claims
+rather than asserting them. Run it with Node (no install needed):
+
+```bash
+node test.js
+```
+
+It validates:
+- **RNG uniformity** via a chi-squared test — the actual evidence that
+  rejection sampling eliminates modulo bias.
+- **Strict character-class enforcement** across thousands of generated passwords.
+- **Wordlist integrity** (7,776 unique EFF words), which backs the passphrase
+  entropy figure.
+- **Entropy math** against hand-computed values.
 
 ## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
