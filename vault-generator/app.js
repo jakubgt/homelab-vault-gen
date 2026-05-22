@@ -23,7 +23,9 @@ const el = {
     userOpts: document.getElementById('user-options'),
     symInput: document.getElementById('sym-input'),
     optCustomSyms: document.getElementById('opt-custom-syms'),
-    paranoidOverlay: document.getElementById('paranoid-overlay')
+    paranoidOverlay: document.getElementById('paranoid-overlay'),
+    poolInfo: document.getElementById('pool-info'),
+    insecureWarning: document.getElementById('insecure-warning')
 };
 
 const CHARS = {
@@ -58,6 +60,11 @@ function syncLength(e) {
 // --- CORE GENERATION ---
 function getSecureRandomInt(max) {
     const randomBytes = new Uint32Array(1);
+    // Rejection sampling: discard any value in the "remainder" tail of the
+    // uint32 range so the surviving values divide evenly by `max`. Without
+    // this, `% max` would over-represent low values (modulo bias) whenever
+    // 2^32 isn't a clean multiple of max. maxValid is the largest exact
+    // multiple of max that fits in a uint32; anything >= it gets re-rolled.
     const maxValid = Math.floor(4294967296 / max) * max;
     while (true) {
         crypto.getRandomValues(randomBytes);
@@ -87,11 +94,24 @@ function generatePassword() {
         if (symPool) {
             pool += symPool;
             activeSets.push(symPool);
+        } else {
+            // Symbols requested but the custom pool is empty. Warn rather than
+            // silently dropping a whole character class the user asked for.
+            el.result.textContent = "Symbols enabled but pool is empty \u2014 add symbols or uncheck.";
+            return;
         }
     }
     
     if (document.getElementById('opt-ambig').checked) {
         pool = pool.replace(/[lI1O0]/g, "");
+        // Re-derive each active set with ambiguous chars stripped, and drop any
+        // set that became empty (e.g. a custom symbol pool of only "l1O0").
+        // Otherwise the class guarantee below could never be satisfied and we'd
+        // silently fall through to the no-guarantee failsafe.
+        for (let i = activeSets.length - 1; i >= 0; i--) {
+            activeSets[i] = activeSets[i].replace(/[lI1O0]/g, "");
+            if (activeSets[i].length === 0) activeSets.splice(i, 1);
+        }
     }
 
     if (!pool) { el.result.textContent = "Select a pool!"; return; }
@@ -108,17 +128,24 @@ function generatePassword() {
     const maxIterations = 1000;
 
     // Character Class Guarantee with Max Iteration Failsafe
+    // Generate-and-check rather than placing one of each up front, because
+    // forced placement subtly biases position. maxIterations is a failsafe:
+    // with pathological inputs (e.g. length barely >= number of sets) the
+    // probability of satisfying every set in one draw can get low enough to
+    // stall, so we cap retries rather than risk a frozen tab.
     while (!isValid && iterations < maxIterations) {
         pwd = "";
         for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
-        isValid = activeSets.every(set => {
-            const setChars = document.getElementById('opt-ambig').checked ? set.replace(/[lI1O0]/g, "") : set;
-            return pwd.split('').some(char => setChars.includes(char));
-        });
+        // activeSets is already ambiguous-stripped above, so a direct membership
+        // check is correct here.
+        isValid = activeSets.every(set => pwd.split('').some(char => set.includes(char)));
         iterations++;
     }
 
-    // Fallback: Best-effort string if constraints somehow fail
+    // Failsafe path: if maxIterations draws never satisfied every class
+    // (extremely unlikely outside degenerate settings), emit a fresh random
+    // string WITHOUT the guarantee rather than hang or return stale output.
+    // It's still full-entropy random; it just may lack one requested class.
     if (iterations >= maxIterations) {
         pwd = "";
         for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
@@ -129,9 +156,14 @@ function generatePassword() {
 
 function generatePassphrase() {
     const count = lengths.pass;
-    const sep = document.getElementById('opt-pass-sep').value;
+    const sepChoice = document.getElementById('opt-pass-sep').value;
     const doCaps = document.getElementById('opt-pass-caps').checked;
     const randCaps = document.getElementById('opt-pass-caps-rand').checked;
+
+    // "random" inserts a fresh random symbol between each pair of words, which
+    // adds real entropy (see calculateEntropyAndStrength). A fixed separator
+    // adds none. We resolve the actual separator(s) at join time below.
+    const RAND_SEP_POOL = "!@#$%^&*-_=+";
     
     let phrase = [];
     for (let i = 0; i < count; i++) {
@@ -167,7 +199,17 @@ function generatePassphrase() {
         }
     }
 
-    el.result.textContent = phrase.join(sep);
+    let out;
+    if (sepChoice === 'random') {
+        // Fresh random symbol in each gap between words.
+        out = phrase[0] || "";
+        for (let i = 1; i < phrase.length; i++) {
+            out += RAND_SEP_POOL[getSecureRandomInt(RAND_SEP_POOL.length)] + phrase[i];
+        }
+    } else {
+        out = phrase.join(sepChoice);
+    }
+    el.result.textContent = out;
 }
 
 function generateUsername() {
@@ -205,15 +247,23 @@ function calculateEntropyAndStrength() {
         if (document.getElementById('opt-pass-caps').checked && document.getElementById('opt-pass-caps-rand').checked) {
             entropy += lengths.pass; 
         }
+        // Random-symbol separator: each of the (count-1) gaps holds one of 11
+        // symbols, so each adds log2(11) bits. Fixed separators add nothing.
+        if (document.getElementById('opt-pass-sep').value === 'random') {
+            entropy += Math.max(0, lengths.pass - 1) * Math.log2(11);
+        }
         if (document.getElementById('opt-pass-nums').checked) {
             let numCount = +document.getElementById('pass-num-count').value;
             let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
             
             if (randomizePositions) {
-                // Entropy of the randomly sprinkled digits
-                entropy += numCount * Math.log2(10); 
-                // Positional entropy based on word length choices
-                entropy += numCount * Math.log2(lengths.pass);
+                // Count digit VALUES only (numCount * log2(10)). We deliberately
+                // do NOT add positional entropy: an attacker who knows the scheme
+                // can see which words carry trailing digits in the output, so
+                // position is not secret. Counting it would make the meter
+                // optimistic -- and for a strength meter, erring conservative is
+                // the only safe direction.
+                entropy += numCount * Math.log2(10);
             } else {
                 // If appending to EVERY word, we generate `numCount * lengths.pass` total random digits
                 entropy += (numCount * lengths.pass) * Math.log2(10);
@@ -228,10 +278,25 @@ function calculateEntropyAndStrength() {
             const uniqueSyms = new Set(el.symInput.value.split('')).size;
             poolSize += uniqueSyms;
         }
+        // Ambiguous-stripping removes l, I, 1, O, 0 — but only the ones
+        // actually present in the selected sets. Build the pool string and
+        // strip it so the count is exact rather than a flat -5.
+        if (document.getElementById('opt-ambig').checked) {
+            let poolStr = "";
+            if (document.getElementById('opt-upper').checked) poolStr += CHARS.upper;
+            if (document.getElementById('opt-lower').checked) poolStr += CHARS.lower;
+            if (document.getElementById('opt-nums').checked) poolStr += CHARS.nums;
+            if (document.getElementById('opt-syms').checked) poolStr += el.symInput.value;
+            poolSize = new Set(poolStr.replace(/[lI1O0]/g, "").split('')).size;
+        }
         entropy = lengths.pwd * Math.log2(poolSize || 1);
+        if (el.poolInfo) el.poolInfo.textContent = `Character pool: ${poolSize} symbols`;
     }
     
     el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
+    // The visual bar saturates at 128 bits; high-word-count passphrases can far
+    // exceed that, so the bar pins at full. The numeric readout above is the
+    // source of truth — the bar is just a quick visual cue.
     el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
     
     let strength = "Weak";
@@ -303,8 +368,17 @@ function triggerCopyFeedback() {
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
         clearTimeout(clearTimer);
         clearTimer = setTimeout(() => {
-            // Overwrite with garbage data first, then clear
-            const garbage = "00000000000000000000000000000000";
+            // Two-step wipe: overwrite with random cover text first, then
+            // clear. Some OS-level clipboard managers keep history; a straight
+            // clear can leave the real secret as the "previous" entry, whereas
+            // overwriting first pushes cover into that slot. Random content of
+            // varied length is used (rather than a fixed "0000..." string) so
+            // the wipe entry isn't itself a recognizable "a secret was here"
+            // signature. Best-effort only (see README threat model).
+            const garbageLen = 24 + getSecureRandomInt(24); // 24-47 chars
+            const garbageChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            let garbage = "";
+            for (let i = 0; i < garbageLen; i++) garbage += garbageChars[getSecureRandomInt(garbageChars.length)];
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(garbage).then(() => {
                     setTimeout(() => navigator.clipboard.writeText(""), 50);
@@ -416,14 +490,31 @@ function saveSettings() {
 
 function loadSettings() {
     try {
-        if (localStorage.getItem('vault_theme') === 'dark') {
+        const savedTheme = localStorage.getItem('vault_theme');
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-mode');
+            el.themeBtn.textContent = '☀️';
+        } else if (savedTheme === null &&
+                   window.matchMedia &&
+                   window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // No explicit choice saved: follow the OS/browser preference.
             document.body.classList.add('dark-mode');
             el.themeBtn.textContent = '☀️';
         }
         
         const saved = JSON.parse(localStorage.getItem('vault_settings'));
         if (saved) {
-            if (saved.lengths) lengths = saved.lengths;
+            // Validate restored lengths before they reach Math.log2 / loops.
+            // localStorage is user-visible and editable, and a partial/corrupt
+            // write could otherwise feed a string or undefined into the math.
+            // Accept only in-range integers; fall back to defaults otherwise.
+            if (saved.lengths && typeof saved.lengths === 'object') {
+                const clamp = (v, min, max, def) =>
+                    (Number.isInteger(v) && v >= min && v <= max) ? v : def;
+                lengths.pwd  = clamp(saved.lengths.pwd, 4, 128, 24);
+                lengths.pass = clamp(saved.lengths.pass, 3, 20, 6);
+                lengths.user = clamp(saved.lengths.user, 1, 10, 2);
+            }
             
             if (saved.clearTime !== undefined) {
                 el.clearTime.value = saved.clearTime;
@@ -525,6 +616,10 @@ document.getElementById('opt-paranoid').addEventListener('change', (e) => {
     }
 });
 
+// Paranoid mode treats leaving the page as a wipe trigger. beforeunload
+// covers close/refresh/navigate; visibilitychange covers tab-switch and
+// minimize. Both clear localStorage / blank the result so a generated
+// secret never lingers in a backgrounded or reopened tab.
 window.addEventListener('beforeunload', () => {
     if (document.getElementById('opt-paranoid').checked) {
         try { localStorage.clear(); } catch(err) {}
@@ -535,6 +630,27 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden && document.getElementById('opt-paranoid').checked) el.result.textContent = "";
 });
 
+// Spacebar regenerates (power-user shortcut). Ignored while typing in an
+// input/select/textarea so it doesn't hijack the space key in fields.
+document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(tag)) return;
+    e.preventDefault();
+    generate();
+});
+
+// Web Crypto is unavailable on plain HTTP (except localhost). If we're not in
+// a secure context, surface it — generation would otherwise throw silently.
+function checkSecureContext() {
+    if (!el.insecureWarning) return;
+    const cryptoOk = window.crypto && window.crypto.getRandomValues;
+    if (!window.isSecureContext || !cryptoOk) {
+        el.insecureWarning.classList.remove('hidden');
+    }
+}
+
 // Init
 loadSettings();
 updateUI();
+checkSecureContext();
