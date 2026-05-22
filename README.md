@@ -1,6 +1,5 @@
 # 🔐 Homelab Vault: Secure Offline Password & Passphrase Generator
 
-![tests](https://github.com/jakubgt/homelab-vault-gen/actions/workflows/tests.yml/badge.svg)
 ![license](https://img.shields.io/badge/license-MIT-blue.svg)
 
 A hyper-secure, offline password and diceware generator built specifically for self-hosting in a homelab environment. 
