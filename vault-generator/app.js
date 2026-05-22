@@ -127,7 +127,7 @@ function generatePassword() {
     let iterations = 0;
     const maxIterations = 1000;
 
-    // Character Class Guarantee with Max Iteration Failsafe
+    // Strict character-class enforcement with Max Iteration Failsafe
     // Generate-and-check rather than placing one of each up front, because
     // forced placement subtly biases position. maxIterations is a failsafe:
     // with pathological inputs (e.g. length barely >= number of sets) the
