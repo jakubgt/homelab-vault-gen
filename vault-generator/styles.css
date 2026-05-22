@@ -178,3 +178,35 @@ h2 { margin-top: 0; margin-bottom: 15px; }
 
 .hidden { display: none !important; }
 hr { border: 0; border-top: 1px solid var(--border-color); margin: 15px 0; }
+
+/* Insecure-context warning banner */
+#insecure-warning {
+    background: #fff3cd;
+    color: #664d03;
+    border: 1px solid #ffe69c;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-bottom: 12px;
+}
+body.dark-mode #insecure-warning {
+    background: #332701;
+    color: #ffda6a;
+    border-color: #665100;
+}
+#insecure-warning code {
+    font-family: monospace;
+    background: rgba(0,0,0,0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* Live character-pool readout under the meter */
+.pool-info {
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.6;
+    margin-top: -10px;
+    margin-bottom: 10px;
+}
