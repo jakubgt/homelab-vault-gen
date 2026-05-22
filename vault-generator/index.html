@@ -20,6 +20,12 @@
             <button id="tab-user" class="tab-btn">Username</button>
         </div>
         
+        <div id="insecure-warning" class="hidden">
+            ⚠️ Insecure context: the Web Crypto API may be unavailable. Open this
+            page over <strong>https</strong> or via <strong>localhost</strong> /
+            <code>file://</code> for secure generation.
+        </div>
+
         <div id="result-container" title="Click to copy">
             <div id="result"></div>
             <div id="paranoid-overlay" class="hidden">Hover to Reveal</div>
@@ -36,6 +42,7 @@
             <div class="crack-estimation">
                 <span id="crack-text">Estimated Time to Crack: Instant</span>
             </div>
+            <div id="pool-info" class="pool-info"></div>
         </div>
 
         <div class="controls">
@@ -104,6 +111,7 @@
                             <option value="_">Underscore (_)</option>
                             <option value=".">Period (.)</option>
                             <option value=" ">Space</option>
+                            <option value="random">Random Symbol (+entropy)</option>
                         </select>
                     </label>
                 </div>
