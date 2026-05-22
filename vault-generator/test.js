@@ -6,7 +6,7 @@
  * These tests exist to PROVE the security claims rather than assert them:
  *   1. getSecureRandomInt produces a statistically uniform distribution
  *      (this is the actual evidence that rejection sampling kills modulo bias).
- *   2. The character-class guarantee genuinely holds across many passwords.
+ *   2. The Strict character-class enforcement holds across thousands of passwords.
  *   3. The wordlist matches the EFF Large Wordlist shape (7,776 unique words),
  *      because the displayed passphrase entropy depends on that count.
  *   4. The displayed entropy formula matches hand-computed values.
