@@ -4,12 +4,12 @@
  * Zero-dependency tests. Run with:   node test.js
  *
  * These tests exist to PROVE the security claims rather than assert them:
- *   1. getSecureRandomInt produces a statistically uniform distribution
- *      (this is the actual evidence that rejection sampling kills modulo bias).
- *   2. The Strict character-class enforcement holds across thousands of passwords.
- *   3. The wordlist matches the EFF Large Wordlist shape (7,776 unique words),
- *      because the displayed passphrase entropy depends on that count.
- *   4. The displayed entropy formula matches hand-computed values.
+ * 1. getSecureRandomInt produces a statistically uniform distribution
+ * (this is the actual evidence that rejection sampling kills modulo bias).
+ * 2. The Strict character-class enforcement holds across thousands of passwords.
+ * 3. The wordlist matches the EFF Large Wordlist shape (7,776 unique words),
+ * because the displayed passphrase entropy depends on that count.
+ * 4. The displayed entropy formula matches hand-computed values.
  *
  * The browser app (app.js) is not imported directly because it touches the
  * DOM, localStorage, and window on load. Instead we re-implement the small
@@ -96,22 +96,47 @@ function chiSquaredUniform(max, draws) {
 }
 
 // ==========================================================================
-section('2. Character-class guarantee');
+section('2. Character-class guarantee (Uint8Array Implementation)');
 
 // Mirror of generatePassword's pool-build + guarantee logic (DOM stripped).
-function generatePasswordPure(len, sets) {
-    let pool = sets.join('');
+function generatePasswordPure(len, rawSets) {
+    let pool = rawSets.join('');
     if (!pool) return '';
-    if (len < sets.length) return null; // mirrors the "length must be >= sets" guard
-    let pwd = '', isValid = false, iterations = 0;
+    if (len < rawSets.length) return null; // mirrors the "length must be >= sets" guard
+    
+    let isValid = false;
+    let iterations = 0;
     const maxIterations = 1000;
+    
+    let activeSetsCodes = rawSets.map(set => {
+        let arr = new Uint8Array(set.length);
+        for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
+        return arr;
+    });
+
+    let pwdBuffer = new Uint8Array(len);
+
     while (!isValid && iterations < maxIterations) {
-        pwd = '';
-        for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
-        isValid = sets.every(set => pwd.split('').some(ch => set.includes(ch)));
+        for (let i = 0; i < len; i++) {
+            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
+        
+        isValid = activeSetsCodes.every(set => {
+            for (let i = 0; i < len; i++) {
+                if (set.includes(pwdBuffer[i])) return true;
+            }
+            return false;
+        });
         iterations++;
     }
-    return pwd;
+
+    if (iterations >= maxIterations) {
+        for (let i = 0; i < len; i++) {
+            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
+    }
+    
+    return new TextDecoder().decode(pwdBuffer);
 }
 
 const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -148,22 +173,44 @@ const SYMS  = "!@#$%^&*()-_=+";
         generatePasswordPure(3, [UPPER, LOWER, NUMS, SYMS]) === null);
 }
 
-// Ambiguous-stripping edge cases. Mirror app.js: strip l/I/1/O/0 from both the
-// pool and each active set, and drop sets that become empty.
+// Ambiguous-stripping edge cases. Mirror app.js logic.
 function stripAmbig(s) { return s.replace(/[lI1O0]/g, ''); }
 function generateWithAmbigStrip(len, rawSets) {
     let sets = rawSets.map(stripAmbig).filter(s => s.length > 0);
-    const pool = sets.join('');
+    let pool = sets.join('');
     if (!pool) return '';
     if (len < sets.length) return null;
-    let pwd = '', isValid = false, iterations = 0;
-    while (!isValid && iterations < 1000) {
-        pwd = '';
-        for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
-        isValid = sets.every(set => pwd.split('').some(ch => set.includes(ch)));
+
+    let activeSetsCodes = sets.map(set => {
+        let arr = new Uint8Array(set.length);
+        for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
+        return arr;
+    });
+
+    let pwdBuffer = new Uint8Array(len);
+    let isValid = false, iterations = 0;
+    const maxIterations = 1000;
+    
+    while (!isValid && iterations < maxIterations) {
+        for (let i = 0; i < len; i++) {
+            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
+        isValid = activeSetsCodes.every(set => {
+            for (let i = 0; i < len; i++) {
+                if (set.includes(pwdBuffer[i])) return true;
+            }
+            return false;
+        });
         iterations++;
     }
-    return pwd;
+    
+    if (iterations >= maxIterations) {
+        for (let i = 0; i < len; i++) {
+            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
+    }
+    
+    return new TextDecoder().decode(pwdBuffer);
 }
 
 {
