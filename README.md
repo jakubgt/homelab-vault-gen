@@ -89,8 +89,78 @@ If you want to quickly host the generator on your machine so other local devices
 
 ---
 
-### 🚀 Advanced Deployment (Homelab Standard - Recommended)
-It is highly recommended to host this on a dedicated, unprivileged Debian/Ubuntu LXC container using NGINX to take advantage of the strict CSP headers.
+### 🌐 Advanced Deployment (Caddy with Automatic HTTPS) [Recommended]
+
+If you need network access (not just localhost) and want HTTPS without manually managing certificates, deploy with Caddy. This is the cleanest fix for the Web Crypto API's strict "secure context" requirement — Caddy auto-provisions and renews TLS certs (Let's Encrypt for public domains, an internal CA for local networks).
+
+> **Pick one Advanced Deployment method.** This Caddy path and the NGINX path above are alternatives — don't run both on the same host. The repo includes a `Caddyfile` with three options (localhost, local network, public domain); you pick one when you configure it.
+
+### 1. Install Caddy
+Official Debian/Ubuntu repository:
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl git ufw
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+```
+
+### 2. Deploy the Code and Caddyfile
+```bash
+sudo rm -rf /var/www/html/*
+git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
+
+# Copy the core application files from the subdirectory into the web root
+sudo cp -r /tmp/passgen/vault-generator/* /var/www/html/
+
+# Move the Caddyfile to the correct system directory
+sudo cp /tmp/passgen/Caddyfile /etc/caddy/Caddyfile
+
+# Clean up and securely set permissions
+sudo rm -rf /tmp/passgen
+sudo find /var/www/html -type d -exec chmod 755 {} \;
+sudo find /var/www/html -type f -exec chmod 644 {} \;
+sudo chown -R caddy:caddy /var/www/html
+```
+
+### 3. Choose Your Deployment Mode
+Open the Caddyfile and uncomment exactly **one** of the three site blocks:
+```bash
+sudo nano /etc/caddy/Caddyfile
+```
+
+* **Option 1 — `localhost` only** (zero-config, single machine): Caddy automatically trusts its own cert on the local machine. Best for trying the tool out before going further.
+* **Option 2 — local network** (LAN IP or `*.lan` hostname): Replace `HOST` in the Caddyfile with your server's IP or local hostname. Clients on *other* devices will see a browser warning until you install Caddy's root CA on them; the cert lives at `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Right choice if you want HTTPS on a private network without a domain.
+* **Option 3 — public domain** (auto Let's Encrypt): Replace `vault.example.com` in the Caddyfile with your real domain. Requires DNS A/AAAA records and ports 80/443 reachable from the internet. No browser warnings.
+
+Validate the syntax before starting the service:
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+```
+
+### 4. Start Caddy
+```bash
+sudo systemctl enable --now caddy
+sudo systemctl status caddy
+```
+
+To watch live logs while you test:
+```bash
+sudo journalctl -u caddy -f
+```
+
+### 5. Firewall
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 443/tcp    # HTTPS
+sudo ufw allow 80/tcp     # required for Option 3's Let's Encrypt renewals
+sudo ufw enable
+```
+
+> 💡 **Tailscale users:** If your server is on a Tailscale network, Caddy can fetch a real Let's Encrypt cert for your `*.your-tailnet.ts.net` hostname using Tailscale's MagicDNS, with no public DNS or open inbound ports required. See the [Caddy + Tailscale guide](https://tailscale.com/kb/1190/caddy-certificates) for the extra config.
+
+### 🌐 Advanced Deployment (Alternative — NGINX for plain HTTP/Reverse Proxies)
+If you already use a reverse proxy (like NGINX Proxy Manager, Traefik, or Cloudflare Tunnels) that handles HTTPS for you, or if you strictly only need plain HTTP, deploy this on a dedicated, unprivileged Debian/Ubuntu LXC container using NGINX. This method applies the strict CSP headers but leaves TLS management up to your external proxy.
 
 > **Pick one Advanced Deployment method.** This NGINX path and the Caddy path below are alternatives — don't run both on the same host.
 
@@ -107,8 +177,8 @@ apt install nginx git ufw -y
 rm -rf /var/www/html/*
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy the files into the web root
-cp -r /tmp/passgen/* /var/www/html/
+# Copy the core application files from the subdirectory into the web root
+cp -r /tmp/passgen/vault-generator/* /var/www/html/
 
 # Clean up temp files
 rm -rf /tmp/passgen
@@ -156,78 +226,6 @@ ufw enable
 ```bash
 systemctl enable nginx
 ```
-
----
-
-### 🌐 Advanced Deployment (Alternative — Caddy with Automatic HTTPS)
-
-If you need **network access** (not just localhost) and want HTTPS without manually managing certificates, deploy with **Caddy** instead of NGINX. This is the cleanest fix for the Web Crypto "secure context" requirement — Caddy auto-provisions and renews TLS certs (Let's Encrypt for public domains, an internal CA for local networks).
-
-> **Pick one Advanced Deployment method.** This Caddy path and the NGINX path above are alternatives — don't run both on the same host. The repo includes a `Caddyfile` with three options (localhost, local network, public domain); you pick one when you configure it.
-
-### 1. Install Caddy
-Official Debian/Ubuntu repository:
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt install -y caddy
-```
-
-### 2. Deploy the Code and Caddyfile
-```bash
-sudo rm -rf /var/www/html/*
-git clone [https://github.com/jakubgt/homelab-vault-gen.git](https://github.com/jakubgt/homelab-vault-gen.git) /tmp/passgen
-
-# Copy the core application files from the subdirectory into the web root
-sudo cp -r /tmp/passgen/vault-generator/* /var/www/html/
-
-# Move the Caddyfile to the correct system directory
-sudo cp /var/www/html/Caddyfile /etc/caddy/Caddyfile
-
-# Clean up and securely set permissions
-sudo rm -rf /tmp/passgen
-sudo find /var/www/html -type d -exec chmod 755 {} \;
-sudo find /var/www/html -type f -exec chmod 644 {} \;
-sudo chown -R caddy:caddy /var/www/html
-```
-
-### 3. Choose Your Deployment Mode
-Open the Caddyfile and uncomment exactly **one** of the three site blocks:
-```bash
-sudo nano /etc/caddy/Caddyfile
-```
-
-* **Option 1 — `localhost` only** (zero-config, single machine): Caddy automatically trusts its own cert on the local machine. Best for trying the tool out before going further.
-* **Option 2 — local network** (LAN IP or `*.lan` hostname): Replace `HOST` in the Caddyfile with your server's IP or local hostname. Clients on *other* devices will see a browser warning until you install Caddy's root CA on them; the cert lives at `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Right choice if you want HTTPS on a private network without a domain.
-* **Option 3 — public domain** (auto Let's Encrypt): Replace `vault.example.com` in the Caddyfile with your real domain. Requires DNS A/AAAA records and ports 80/443 reachable from the internet. No browser warnings.
-
-Validate the syntax before starting the service:
-```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-```
-
-### 4. Start Caddy
-```bash
-sudo systemctl enable --now caddy
-sudo systemctl status caddy
-```
-
-To watch live logs while you test:
-```bash
-sudo journalctl -u caddy -f
-```
-
-### 5. Firewall
-```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 443/tcp    # HTTPS
-sudo ufw allow 80/tcp     # required for Option 3's Let's Encrypt renewals
-sudo ufw enable
-```
-
-> 💡 **Tailscale users:** If your server is on a Tailscale network, Caddy can fetch a real Let's Encrypt cert for your `*.your-tailnet.ts.net` hostname using Tailscale's MagicDNS, with no public DNS or open inbound ports required. See the [Caddy + Tailscale guide](https://tailscale.com/kb/1190/caddy-certificates) for the extra config.
 
 ## 🧪 Testing & Verification
 
