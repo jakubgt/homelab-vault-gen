@@ -12,7 +12,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 
 ## ✨ Features
 
-* **True Cryptographic Security:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias, ensuring perfect uniform distribution of characters.
+* **True Cryptographic Security & Memory Safety:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias. Generation is performed directly within a `Uint8Array` memory buffer, completely eliminating intermediate string allocations that would otherwise linger in the browser's memory heap.
 * **Username Generation:** Create clean, memorable usernames by securely combining random words from the built-in dictionary, complete with custom separators and optional randomized number suffixes.
 * **Passphrase / Diceware Mode:** Generate highly memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
     * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
@@ -21,10 +21,10 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Advanced Entropy & Crack-Time Meter:** Calculates bit-entropy from charset size and length:
   $$H = L \cdot \log_{2}(N)$$
   Where $L$ is length and $N$ is the charset size. For passphrase mode the meter deliberately rounds **conservative** (it does not count entropy an attacker could infer from the visible output structure), so the displayed number is a floor, not a ceiling. The meter dynamically displays plain-English **Strength Classifications** and estimates **Time to Crack** (based on a modern cracking speed of 100 billion guesses per second).
-* **Paranoid Mode & Memory Wiping:**
+* **Cryptographic Memory Wiping & Paranoid Mode:**
+    * **Memory Shredding:** When the Auto-Clear timer finishes or Paranoid Mode detects you have switched browser tabs/minimized the window, the app actively shreds the secret by overwriting the memory addresses with cryptographic noise, zeroing them out, and clearing the DOM.
     * **Visual Privacy:** Blurs the password on-screen until hovered.
-    * **Auto-Clear:** Automatically clears the DOM and resets results if you switch browser tabs, minimize, or close the window.
-    * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains.
+    * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains..
 * **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
 * **Precision Length Controls:** Features a manual numeric input and full-width slider for exact counts — characters (4–128) in password mode, words in passphrase (3–20) and username (1–10) modes.
