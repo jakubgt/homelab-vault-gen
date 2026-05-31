@@ -39,6 +39,24 @@ const SAFE_SYMS = "!@#%^*-_=+:./?";
 let currentMode = 'pwd'; 
 let clearTimer;
 let lengths = { pwd: 24, pass: 6, user: 2 }; 
+let activeSecretBuffer = null;
+
+// --- CRYPTOGRAPHIC MEMORY WIPING ---
+function wipeMemory() {
+    if (activeSecretBuffer) {
+        // Explicitly overwrite the memory addresses with random noise, then zeros,
+        // before relinquishing the reference to the garbage collector.
+        crypto.getRandomValues(activeSecretBuffer);
+        activeSecretBuffer.fill(0);
+        activeSecretBuffer = null;
+    }
+}
+
+function wipeSecret() {
+    wipeMemory();
+    // Clear the DOM content to ensure no visual traces remain
+    el.result.textContent = "";
+}
 
 // --- DUAL-SYNC LENGTH LOGIC ---
 function syncLength(e) {
@@ -81,6 +99,8 @@ function generate() {
 }
 
 function generatePassword() {
+    wipeMemory(); // Securely free the previous buffer before allocating a new one
+    
     const len = lengths.pwd;
     let pool = "";
     const activeSets = [];
@@ -122,119 +142,182 @@ function generatePassword() {
         return;
     }
 
-    let pwd = "";
     let isValid = false;
     let iterations = 0;
     const maxIterations = 1000;
+    
+    // Convert activeSets to typed arrays for strict validation without strings
+    let activeSetsCodes = activeSets.map(set => {
+        let arr = new Uint8Array(set.length);
+        for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
+        return arr;
+    });
+
+    activeSecretBuffer = new Uint8Array(len);
 
     // Strict character-class enforcement with Max Iteration Failsafe
-    // Generate-and-check rather than placing one of each up front, because
-    // forced placement subtly biases position. maxIterations is a failsafe:
-    // with pathological inputs (e.g. length barely >= number of sets) the
-    // probability of satisfying every set in one draw can get low enough to
-    // stall, so we cap retries rather than risk a frozen tab.
     while (!isValid && iterations < maxIterations) {
-        pwd = "";
-        for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
-        // activeSets is already ambiguous-stripped above, so a direct membership
-        // check is correct here.
-        isValid = activeSets.every(set => pwd.split('').some(char => set.includes(char)));
+        for (let i = 0; i < len; i++) {
+            activeSecretBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
+        
+        isValid = activeSetsCodes.every(set => {
+            for (let i = 0; i < len; i++) {
+                if (set.includes(activeSecretBuffer[i])) return true;
+            }
+            return false;
+        });
         iterations++;
     }
 
-    // Failsafe path: if maxIterations draws never satisfied every class
-    // (extremely unlikely outside degenerate settings), emit a fresh random
-    // string WITHOUT the guarantee rather than hang or return stale output.
-    // It's still full-entropy random; it just may lack one requested class.
+    // Failsafe path: if maxIterations draws never satisfied every class,
+    // emit a fresh random array WITHOUT the guarantee rather than hang.
     if (iterations >= maxIterations) {
-        pwd = "";
-        for (let i = 0; i < len; i++) pwd += pool[getSecureRandomInt(pool.length)];
+        for (let i = 0; i < len; i++) {
+            activeSecretBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
+        }
     }
 
-    el.result.textContent = pwd;
+    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
 }
 
 function generatePassphrase() {
+    wipeMemory();
+    
     const count = lengths.pass;
     const sepChoice = document.getElementById('opt-pass-sep').value;
     const doCaps = document.getElementById('opt-pass-caps').checked;
     const randCaps = document.getElementById('opt-pass-caps-rand').checked;
-
-    // "random" inserts a fresh random symbol between each pair of words, which
-    // adds real entropy (see calculateEntropyAndStrength). A fixed separator
-    // adds none. We resolve the actual separator(s) at join time below.
     const RAND_SEP_POOL = "!@#$%^&*-_=+";
+    const doNums = document.getElementById('opt-pass-nums').checked;
+    let numCount = +document.getElementById('pass-num-count').value;
+    let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
     
-    let phrase = [];
+    let wordIndices = [];
+    let capMask = [];
+    let totalLength = 0;
+
     for (let i = 0; i < count; i++) {
-        let word = WORDS[getSecureRandomInt(WORDS.length)];
-        
-        if (doCaps) {
-            if (!randCaps || getSecureRandomInt(2) === 1) {
-                word = word.charAt(0).toUpperCase() + word.slice(1);
-            }
-        }
-        phrase.push(word);
+        let idx = getSecureRandomInt(WORDS.length);
+        wordIndices.push(idx);
+        totalLength += WORDS[idx].length;
+        capMask.push(doCaps && (!randCaps || getSecureRandomInt(2) === 1));
     }
 
-    if (document.getElementById('opt-pass-nums').checked) {
-        let numCount = +document.getElementById('pass-num-count').value;
-        let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
-        
-        if (randomizePositions) {
-            // Sprinkle numbers randomly across the whole phrase
-            for (let i = 0; i < numCount; i++) {
-                let targetIdx = getSecureRandomInt(phrase.length);
-                phrase[targetIdx] += getSecureRandomInt(10);
-            }
+    // Add appended numbers length
+    if (doNums && !randomizePositions) {
+        totalLength += (numCount * count);
+    }
+
+    // Add separators length
+    if (count > 1) {
+        if (sepChoice === 'random') totalLength += (count - 1);
+        else if (sepChoice !== '') totalLength += (sepChoice.length * (count - 1));
+    }
+
+    // Add sprinkled numbers length
+    if (doNums && randomizePositions) {
+        totalLength += numCount;
+    }
+
+    activeSecretBuffer = new Uint8Array(totalLength);
+    let offset = 0;
+
+    const writeStr = (str) => {
+        for(let i=0; i<str.length; i++) activeSecretBuffer[offset++] = str.charCodeAt(i);
+    };
+
+    for (let i = 0; i < count; i++) {
+        let word = WORDS[wordIndices[i]];
+        if (capMask[i]) {
+            activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; // Capitalize
+            writeStr(word.slice(1));
         } else {
-            // Append exactly numCount to EVERY word in the phrase
-            for (let i = 0; i < phrase.length; i++) {
-                let nums = "";
-                for (let j = 0; j < numCount; j++) {
-                    nums += getSecureRandomInt(10);
-                }
-                phrase[i] += nums;
+            writeStr(word);
+        }
+        
+        if (doNums && !randomizePositions) {
+            for (let j = 0; j < numCount; j++) {
+                activeSecretBuffer[offset++] = 48 + getSecureRandomInt(10);
+            }
+        }
+        
+        if (i < count - 1) {
+            if (sepChoice === 'random') {
+                activeSecretBuffer[offset++] = RAND_SEP_POOL.charCodeAt(getSecureRandomInt(RAND_SEP_POOL.length));
+            } else if (sepChoice !== '') {
+                writeStr(sepChoice);
             }
         }
     }
 
-    let out;
-    if (sepChoice === 'random') {
-        // Fresh random symbol in each gap between words.
-        out = phrase[0] || "";
-        for (let i = 1; i < phrase.length; i++) {
-            out += RAND_SEP_POOL[getSecureRandomInt(RAND_SEP_POOL.length)] + phrase[i];
+    // In-place shifting for sprinkled numbers (avoids string/array allocation)
+    if (doNums && randomizePositions) {
+        let currentLen = offset;
+        for (let i = 0; i < numCount; i++) {
+            let targetIdx = getSecureRandomInt(currentLen + 1);
+            for (let j = currentLen; j > targetIdx; j--) {
+                activeSecretBuffer[j] = activeSecretBuffer[j - 1];
+            }
+            activeSecretBuffer[targetIdx] = 48 + getSecureRandomInt(10);
+            currentLen++;
         }
-    } else {
-        out = phrase.join(sepChoice);
     }
-    el.result.textContent = out;
+
+    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
 }
 
 function generateUsername() {
+    wipeMemory();
+    
     const count = lengths.user;
     const sep = document.getElementById('opt-user-sep').value;
-    
-    let phrase = [];
+    const doNums = document.getElementById('opt-user-nums').checked;
+    let numCount = +document.getElementById('user-num-count').value;
+
+    let wordIndices = [];
+    let totalLength = 0;
+
     for (let i = 0; i < count; i++) {
-        let word = WORDS[getSecureRandomInt(WORDS.length)];
-        word = word.charAt(0).toUpperCase() + word.slice(1); 
-        phrase.push(word);
+        let idx = getSecureRandomInt(WORDS.length);
+        wordIndices.push(idx);
+        totalLength += WORDS[idx].length;
     }
     
-    let result = phrase.join(sep);
+    if (sep !== '') {
+        totalLength += sep.length * (count - 1);
+        if (doNums) totalLength += sep.length;
+    }
     
-    if (document.getElementById('opt-user-nums').checked) {
-        let numCount = +document.getElementById('user-num-count').value;
-        let nums = "";
-        for(let i = 0; i < numCount; i++) {
-            nums += getSecureRandomInt(10);
+    if (doNums) {
+        totalLength += numCount;
+    }
+
+    activeSecretBuffer = new Uint8Array(totalLength);
+    let offset = 0;
+
+    const writeStr = (str) => {
+        for(let i=0; i<str.length; i++) activeSecretBuffer[offset++] = str.charCodeAt(i);
+    };
+
+    for (let i = 0; i < count; i++) {
+        let word = WORDS[wordIndices[i]];
+        activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; // Capitalize
+        writeStr(word.slice(1));
+        
+        if (i < count - 1 && sep !== '') {
+            writeStr(sep);
         }
-        result += sep ? sep + nums : nums;
     }
     
-    el.result.textContent = result;
+    if (doNums) {
+        if (sep !== '') writeStr(sep);
+        for(let i = 0; i < numCount; i++) {
+            activeSecretBuffer[offset++] = 48 + getSecureRandomInt(10);
+        }
+    }
+    
+    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
 }
 
 // --- STATS AND ENTROPY ---
@@ -368,6 +451,9 @@ function triggerCopyFeedback() {
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
         clearTimeout(clearTimer);
         clearTimer = setTimeout(() => {
+            // Memory & DOM Wipe Target
+            wipeSecret();
+
             // Two-step wipe: overwrite with random cover text first, then
             // clear. Some OS-level clipboard managers keep history; a straight
             // clear can leave the real secret as the "previous" entry, whereas
@@ -379,6 +465,7 @@ function triggerCopyFeedback() {
             const garbageChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
             let garbage = "";
             for (let i = 0; i < garbageLen; i++) garbage += garbageChars[getSecureRandomInt(garbageChars.length)];
+            
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(garbage).then(() => {
                     setTimeout(() => navigator.clipboard.writeText(""), 50);
@@ -389,7 +476,7 @@ function triggerCopyFeedback() {
             }
 
             el.copyBtn.textContent = "Copy";
-            showToast("Clipboard cleared.");
+            showToast("Clipboard and memory cleared.");
         }, delay);
     };
 
@@ -618,16 +705,18 @@ document.getElementById('opt-paranoid').addEventListener('change', (e) => {
 
 // Paranoid mode treats leaving the page as a wipe trigger. beforeunload
 // covers close/refresh/navigate; visibilitychange covers tab-switch and
-// minimize. Both clear localStorage / blank the result so a generated
-// secret never lingers in a backgrounded or reopened tab.
+// minimize. Both execute cryptographic buffer wipes and clear the DOM.
 window.addEventListener('beforeunload', () => {
     if (document.getElementById('opt-paranoid').checked) {
+        wipeSecret();
         try { localStorage.clear(); } catch(err) {}
     }
 });
 
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden && document.getElementById('opt-paranoid').checked) el.result.textContent = "";
+    if (document.hidden && document.getElementById('opt-paranoid').checked) {
+        wipeSecret();
+    }
 });
 
 // Spacebar regenerates (power-user shortcut). Ignored while typing in an
