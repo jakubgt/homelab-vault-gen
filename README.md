@@ -106,20 +106,25 @@ sudo apt update && sudo apt install -y caddy
 
 ### 2. Deploy the Code and Caddyfile
 ```bash
+# Create the web directory and pull the generator
+sudo mkdir -p /var/www/html
 sudo rm -rf /var/www/html/*
-git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
+git clone [https://github.com/jakubgt/homelab-vault-gen.git](https://github.com/jakubgt/homelab-vault-gen.git) /tmp/passgen
 
 # Copy the core application files from the subdirectory into the web root
 sudo cp -r /tmp/passgen/vault-generator/* /var/www/html/
 
 # Move the Caddyfile to the correct system directory
-sudo cp /tmp/passgen/Caddyfile /etc/caddy/Caddyfile
+sudo cp /tmp/passgen/vault-generator/Caddyfile /etc/caddy/Caddyfile
+
+# Remove non-web config files from the public web root
+sudo rm -f /var/www/html/Caddyfile /var/www/html/nginx.conf /var/www/html/docker-compose.yml /var/www/html/tests.yml /var/www/html/test.js
 
 # Clean up and securely set permissions
 sudo rm -rf /tmp/passgen
+sudo chown -R caddy:caddy /var/www/html
 sudo find /var/www/html -type d -exec chmod 755 {} \;
 sudo find /var/www/html -type f -exec chmod 644 {} \;
-sudo chown -R caddy:caddy /var/www/html
 ```
 
 ### 3. Choose Your Deployment Mode
