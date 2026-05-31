@@ -145,7 +145,7 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 ### 4. Start Caddy
 ```bash
 sudo systemctl enable --now caddy
-sudo systemctl status caddy
+sudo systemctl restart caddy
 ```
 
 To watch live logs while you test:
@@ -159,7 +159,7 @@ sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow 443/tcp    # HTTPS
 sudo ufw allow 80/tcp     # required for Option 3's Let's Encrypt renewals
-sudo ufw enable
+sudo ufw --force enable
 ```
 
 > 💡 **Tailscale users:** If your server is on a Tailscale network, Caddy can fetch a real Let's Encrypt cert for your `*.your-tailnet.ts.net` hostname using Tailscale's MagicDNS, with no public DNS or open inbound ports required. See the [Caddy + Tailscale guide](https://tailscale.com/kb/1190/caddy-certificates) for the extra config.
