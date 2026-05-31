@@ -106,9 +106,6 @@ sudo apt update && sudo apt install -y caddy
 
 ### 2. Deploy the Code and Caddyfile
 ```bash
-# Clean up the failed clone attempt
-sudo rm -rf /tmp/passgen
-
 # Create the web directory and empty it
 sudo mkdir -p /var/www/html
 sudo rm -rf /var/www/html/*
