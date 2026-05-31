@@ -106,10 +106,15 @@ sudo apt update && sudo apt install -y caddy
 
 ### 2. Deploy the Code and Caddyfile
 ```bash
-# Create the web directory and pull the generator
+# Clean up the failed clone attempt
+sudo rm -rf /tmp/passgen
+
+# Create the web directory and empty it
 sudo mkdir -p /var/www/html
 sudo rm -rf /var/www/html/*
-git clone https://github.com/jakubgt/homelab-vault-gen.git](https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
+
+# Pull the generator
+git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
 # Copy the core application files from the subdirectory into the web root
 sudo cp -r /tmp/passgen/vault-generator/* /var/www/html/
