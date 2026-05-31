@@ -28,6 +28,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
 * **Precision Length Controls:** Features a manual numeric input and full-width slider for exact counts — characters (4–128) in password mode, words in passphrase (3–20) and username (1–10) modes.
+* **Keyboard Shortcuts:** Instantly generate a new password, passphrase, or username at any time simply by pressing the `Spacebar`.
 
 ---
 
