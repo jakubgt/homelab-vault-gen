@@ -41,13 +41,18 @@ let clearTimer;
 let lengths = { pwd: 24, pass: 6, user: 2 }; 
 let activeSecretBuffer = null;
 
-// --- CRYPTOGRAPHIC MEMORY WIPING ---
+// --- WORKING-BUFFER WIPING (best-effort) ---
+// Zeroes the Uint8Array that holds the secret while it's being built, then drops
+// the reference. IMPORTANT: this is only ONE copy. Showing or copying a result
+// also creates immutable JS strings (result.textContent, the clipboard, the
+// fallback <textarea>) that the engine may duplicate internally and that cannot
+// be overwritten in place or force-freed from script. So this is a best-effort
+// reduction of in-memory residue over the buffer copy, NOT a guarantee the
+// secret is gone from memory. The README threat model spells this out.
 function wipeMemory() {
     if (activeSecretBuffer) {
-        // Explicitly overwrite the memory addresses with random noise, then zeros,
-        // before relinquishing the reference to the garbage collector.
-        crypto.getRandomValues(activeSecretBuffer);
-        activeSecretBuffer.fill(0);
+        crypto.getRandomValues(activeSecretBuffer); // cover with noise...
+        activeSecretBuffer.fill(0);                 // ...then zero
         activeSecretBuffer = null;
     }
 }
@@ -88,6 +93,17 @@ function getSecureRandomInt(max) {
         crypto.getRandomValues(randomBytes);
         if (randomBytes[0] < maxValid) return randomBytes[0] % max;
     }
+}
+
+// Read an integer from a numeric <input>, clamped to [min, max], falling back to
+// `def` when the field is blank or non-numeric. The length inputs are validated
+// on load (see loadSettings); these live num-count fields were not, which let a
+// blank or NaN value reach the buffer-size math -- new Uint8Array(NaN) yields a
+// zero-length buffer and a silently truncated/empty result.
+function readIntField(id, min, max, def) {
+    const v = parseInt(document.getElementById(id).value, 10);
+    if (!Number.isFinite(v)) return def;
+    return Math.min(max, Math.max(min, v));
 }
 
 function generate() {
@@ -190,7 +206,7 @@ function generatePassphrase() {
     const randCaps = document.getElementById('opt-pass-caps-rand').checked;
     const RAND_SEP_POOL = "!@#$%^&*-_=+";
     const doNums = document.getElementById('opt-pass-nums').checked;
-    let numCount = +document.getElementById('pass-num-count').value;
+    let numCount = readIntField('pass-num-count', 1, 10, 2);
     let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
     
     let wordIndices = [];
@@ -273,7 +289,7 @@ function generateUsername() {
     const count = lengths.user;
     const sep = document.getElementById('opt-user-sep').value;
     const doNums = document.getElementById('opt-user-nums').checked;
-    let numCount = +document.getElementById('user-num-count').value;
+    let numCount = readIntField('user-num-count', 1, 9, 3);
 
     let wordIndices = [];
     let totalLength = 0;
@@ -321,6 +337,33 @@ function generateUsername() {
 }
 
 // --- STATS AND ENTROPY ---
+// Turn a raw "seconds to exhaust the keyspace" figure into an honest, finite,
+// human-readable duration. Deliberately never returns "infinite" -- for very
+// large keyspaces it falls back to scientific-notation years, which is both
+// truthful and still clearly communicates "not happening".
+function formatCrackTime(seconds) {
+    if (!isFinite(seconds)) return 'longer than the age of the universe';
+    if (seconds < 1) return 'instant';
+    const MIN = 60, HOUR = 3600, DAY = 86400, YEAR = 31557600; // 365.25 days
+    if (seconds < MIN)  return `${Math.round(seconds)} seconds`;
+    if (seconds < HOUR) return `${Math.round(seconds / MIN)} minutes`;
+    if (seconds < DAY)  return `${Math.round(seconds / HOUR)} hours`;
+    if (seconds < YEAR) return `${Math.round(seconds / DAY)} days`;
+
+    const years = seconds / YEAR;
+    if (years < 1000) return `${Math.round(years)} year${Math.round(years) === 1 ? '' : 's'}`;
+    const scales = [
+        [1e6,  1e3,  'thousand'],
+        [1e9,  1e6,  'million'],
+        [1e12, 1e9,  'billion'],
+        [1e15, 1e12, 'trillion'],
+    ];
+    for (const [hi, div, name] of scales) {
+        if (years < hi) return `${(years / div).toFixed(1)} ${name} years`;
+    }
+    return `${years.toExponential(1)} years`;
+}
+
 function calculateEntropyAndStrength() {
     let entropy = 0;
     
@@ -336,7 +379,7 @@ function calculateEntropyAndStrength() {
             entropy += Math.max(0, lengths.pass - 1) * Math.log2(11);
         }
         if (document.getElementById('opt-pass-nums').checked) {
-            let numCount = +document.getElementById('pass-num-count').value;
+            let numCount = readIntField('pass-num-count', 1, 10, 2);
             let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
             
             if (randomizePositions) {
@@ -383,27 +426,33 @@ function calculateEntropyAndStrength() {
     el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
     
     let strength = "Weak";
-    let crackTime = "Instant";
     let colorClass = "strength-weak";
     let barColor = "#dc3545";
 
-    const seconds = Math.pow(2, entropy) / 10000000000;
+    // Single fixed rate: 100 billion guesses/sec (1e11). This assumes a FAST,
+    // unsalted hash (one SHA-family round on commodity GPUs). A slow KDF such as
+    // bcrypt/argon2 would be many orders of magnitude slower, so this is a rough
+    // yardstick, not a guarantee -- see the README crack-time note. (The old code
+    // used 1e10, which silently disagreed with the README's stated 100B/s.)
+    const seconds = Math.pow(2, entropy) / 1e11;
 
+    // The qualitative band drives the label + colour; the time itself is computed
+    // by formatCrackTime so we never print a dishonest word like "Infinite".
     if (entropy < 40) {
-        strength = "Weak"; crackTime = "Instant"; colorClass = "strength-weak"; barColor = "#dc3545";
-    } else if (seconds < 86400) { 
-        strength = "Fair"; crackTime = "Hours"; colorClass = "strength-fair"; barColor = "#fd7e14";
-    } else if (seconds < 31536000) { 
-        strength = "Good"; crackTime = "Days"; colorClass = "strength-good"; barColor = "#28a745";
-    } else if (seconds < 3.15e11) { 
-        strength = "Strong"; crackTime = "Centuries"; colorClass = "strength-strong"; barColor = "#20c997";
+        strength = "Weak"; colorClass = "strength-weak"; barColor = "#dc3545";
+    } else if (seconds < 86400) {
+        strength = "Fair"; colorClass = "strength-fair"; barColor = "#fd7e14";
+    } else if (seconds < 31536000) {
+        strength = "Good"; colorClass = "strength-good"; barColor = "#28a745";
+    } else if (seconds < 3.15e11) {
+        strength = "Strong"; colorClass = "strength-strong"; barColor = "#20c997";
     } else {
-        strength = "Very Strong"; crackTime = "Infinite"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
+        strength = "Very Strong"; colorClass = "strength-very-strong"; barColor = "#8a2be2";
     }
 
     el.strengthText.textContent = `Strength: ${strength}`;
     el.strengthText.className = colorClass;
-    el.crackText.textContent = `Estimated Time to Crack: ${crackTime}`;
+    el.crackText.textContent = `Estimated Time to Crack: ${formatCrackTime(seconds)}`;
     el.entropyBar.style.backgroundColor = barColor;
 }
 
@@ -729,12 +778,18 @@ document.addEventListener('keydown', (e) => {
     generate();
 });
 
-// Web Crypto is unavailable on plain HTTP (except localhost). If we're not in
-// a secure context, surface it — generation would otherwise throw silently.
+// The ONLY crypto primitive this app uses is crypto.getRandomValues, which is
+// available in every context -- https, http, and file://. SubtleCrypto is the
+// part gated behind a secure context, and we never touch it. So the only thing
+// that actually prevents generation is getRandomValues being missing entirely
+// (a very old or locked-down browser). Warn on that alone -- keying the banner
+// off !isSecureContext (the previous behaviour) cried wolf on file:// and plain
+// HTTP, where generation works perfectly and only the async clipboard degrades
+// to the legacy execCommand copy path.
 function checkSecureContext() {
     if (!el.insecureWarning) return;
-    const cryptoOk = window.crypto && window.crypto.getRandomValues;
-    if (!window.isSecureContext || !cryptoOk) {
+    const cryptoOk = window.crypto && typeof window.crypto.getRandomValues === 'function';
+    if (!cryptoOk) {
         el.insecureWarning.classList.remove('hidden');
     }
 }
