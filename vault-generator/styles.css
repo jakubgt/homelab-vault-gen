@@ -165,7 +165,7 @@ h2 { margin-top: 0; margin-bottom: 15px; }
 .paranoid-active #result { filter: blur(8px); opacity: 0.5; }
 .paranoid-active #result-container:hover #result { filter: blur(0); opacity: 1; }
 #paranoid-overlay { position: absolute; font-weight: bold; pointer-events: none; font-size: 14px; transition: opacity 0.2s; }
-.paranoid-active #result-container:hover #paranoid-overlay { opacity: 0; } /* Fixes the text overlap issue */
+.paranoid-active #result-container:hover #paranoid-overlay { opacity: 0; } 
 
 #toast {
     visibility: hidden; min-width: 250px; background-color: var(--accent); color: #fff;
@@ -211,8 +211,7 @@ body.dark-mode #insecure-warning {
     margin-bottom: 10px;
 }
 
-/* --- Layout helpers: replace former inline style="" attributes so the strict
-   CSP (style-src 'self', no 'unsafe-inline') doesn't strip them. --- */
+/* Layout helpers */
 .opt-col { display: flex; flex-direction: column; gap: 12px; }
 .opt-indent { margin-left: 24px; }
 .amount-row { display: flex; align-items: center; gap: 6px; }
@@ -236,3 +235,36 @@ body.dark-mode #insecure-warning {
     border-radius: 4px; background: var(--input-bg); color: var(--text-color);
 }
 .clear-select { margin-left: 10px; padding: 2px; }
+
+/* --- QR Modal & Action Group --- */
+.action-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+.action-group .action-btn { margin-top: 0; }
+#generate-btn { flex: 2; }
+#qr-btn { flex: 1; background-color: #6c757d; }
+#copy-btn { flex: 1; }
+
+#qr-modal {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+.qr-content {
+    background: var(--container-bg);
+    padding: 25px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+#qr-canvas {
+    border: 10px solid white; /* Contrast buffer ensures readability for scanners */
+    border-radius: 4px;
+}
