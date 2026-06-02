@@ -21,9 +21,11 @@
         </div>
         
         <div id="insecure-warning" class="hidden">
-            ⚠️ Insecure context: the Web Crypto API may be unavailable. Open this
-            page over <strong>https</strong> or via <strong>localhost</strong> /
-            <code>file://</code> for secure generation.
+            ⚠️ This browser doesn't expose a secure random source
+            (<code>crypto.getRandomValues</code>), so secure generation isn't
+            available here. Use a current version of Chrome, Edge, Firefox, or
+            Safari. (Plain <strong>http</strong> and <code>file://</code> are
+            fine — only an outdated/locked-down browser triggers this.)
         </div>
 
         <div id="result-container" title="Click to copy">
@@ -50,7 +52,7 @@
                 <span id="length-label">Length</span>
                 <input type="number" id="length-num" min="4" max="128" value="24">
             </div>
-            <input type="range" id="length" min="4" max="128" value="24" class="full-slider" id="length-slider">
+            <input type="range" id="length" min="4" max="128" value="24" class="full-slider">
 
             <div id="pwd-options" class="options-grid">
                 <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
@@ -76,37 +78,37 @@
             </div>
 
             <div id="pass-options" class="options-grid hidden">
-                <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="opt-col">
                     <div>
                         <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize Words</label>
                         <div class="opt-desc">Starts words with an uppercase letter.</div>
                     </div>
-                    <div id="opt-pass-caps-rand-wrapper" style="margin-left: 24px;">
+                    <div id="opt-pass-caps-rand-wrapper" class="opt-indent">
                         <label><input type="checkbox" id="opt-pass-caps-rand"> Randomize Caps</label>
                         <div class="opt-desc">Applies capitals randomly instead of all words.</div>
                     </div>
                 </div>
 
-                <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="opt-col">
                     <div>
                         <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
                         <div class="opt-desc">Appends numbers to the generated phrase.</div>
                     </div>
-                    <div id="pass-num-options-wrapper" class="hidden" style="margin-left: 24px; display: flex; flex-direction: column; gap: 12px;">
+                    <div id="pass-num-options-wrapper" class="hidden opt-indent opt-col">
                         <div>
                             <label><input type="checkbox" id="opt-pass-nums-rand" checked> Randomize Numbers</label>
                             <div class="opt-desc">Sprinkles numbers randomly instead of appending to every word.</div>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="font-size: 13px; color: var(--text-color);">Amount:</span> 
-                            <input type="number" id="pass-num-count" min="1" max="10" value="2" style="width: 50px; padding: 2px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                        <div class="amount-row">
+                            <span class="amount-label">Amount:</span> 
+                            <input type="number" id="pass-num-count" min="1" max="10" value="2" class="num-mini">
                         </div>
                     </div>
                 </div>
 
-                <div class="full-width-opt" style="margin-top: 10px;">
+                <div class="full-width-opt mt-10">
                     <label>Separator: 
-                        <select id="opt-pass-sep" style="margin-left: 10px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                        <select id="opt-pass-sep" class="select-inline">
                             <option value="-">Hyphen (-)</option>
                             <option value="_">Underscore (_)</option>
                             <option value=".">Period (.)</option>
@@ -118,20 +120,20 @@
             </div>
 
             <div id="user-options" class="options-grid hidden">
-                <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="opt-col">
                     <div>
                         <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
                         <div class="opt-desc">Adds random digits to the end of the username.</div>
                     </div>
-                    <div id="user-num-count-wrapper" style="margin-left: 24px; display: flex; align-items: center; gap: 5px;">
-                        <span style="font-size: 13px; color: var(--text-color);">Amount:</span> 
-                        <input type="number" id="user-num-count" min="1" max="9" value="3" style="width: 50px; padding: 2px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                    <div id="user-num-count-wrapper" class="opt-indent amount-row">
+                        <span class="amount-label">Amount:</span> 
+                        <input type="number" id="user-num-count" min="1" max="9" value="3" class="num-mini">
                     </div>
                 </div>
 
-                <div style="display: flex; flex-direction: column; justify-content: flex-start;">
-                    <label style="display: flex; align-items: center;">Separator: 
-                        <select id="opt-user-sep" style="margin-left: 10px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                <div class="opt-col">
+                    <label class="label-row">Separator: 
+                        <select id="opt-user-sep" class="select-inline">
                             <option value="">None</option>
                             <option value="-">Hyphen (-)</option>
                             <option value="_">Underscore (_)</option>
@@ -143,20 +145,20 @@
 
             <hr>
 
-            <div class="full-width-opt" style="margin-bottom: 15px;">
+            <div class="full-width-opt mb-15">
                 <label><input type="checkbox" id="opt-paranoid"> Paranoid Mode</label>
                 <div class="opt-desc">Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</div>
             </div>
 
-            <div class="setting-row" style="margin-top: 10px; display: flex; align-items: center;">
+            <div class="setting-row">
                 <label for="clear-time">Auto-Clear:</label>
-                <select id="clear-time" style="margin-left: 10px; padding: 2px;">
+                <select id="clear-time" class="clear-select">
                     <option value="30000">30 Seconds</option>
                     <option value="60000" selected>60 Seconds</option>
                     <option value="300000">5 Minutes</option>
                     <option value="custom">Custom...</option>
                 </select>
-                <input type="number" id="custom-clear-time" class="hidden" min="1" placeholder="Secs" style="width: 70px; margin-left: 5px; padding: 2px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                <input type="number" id="custom-clear-time" class="hidden num-clear" min="1" placeholder="Secs">
             </div>
         </div>
 
