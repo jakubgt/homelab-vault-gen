@@ -13,8 +13,8 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 ## ✨ Features
 
 * **True Cryptographic Security & Memory Safety:** Uses `window.crypto.getRandomValues` combined with **Rejection Sampling** to completely eliminate modulo bias. Generation is performed directly within a `Uint8Array` memory buffer, completely eliminating intermediate string allocations that would otherwise linger in the browser's memory heap.
-* **Username Generation:** Create clean, memorable usernames by securely combining random words from the built-in dictionary, complete with custom separators and optional randomized number suffixes.
-* **Passphrase / Diceware Mode:** Generate highly memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
+* **Username Generation:** Create clean usernames by securely combining random words from the built-in dictionary, complete with custom separators and optional randomized number suffixes.
+* **Passphrase / Diceware Mode:** Generate memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
     * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
 * **Character Class Guarantees & Custom Symbols:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password. 
     * Includes a **Custom Symbol Pool** input and a **"Safe Symbols" Toggle** to quickly filter out characters commonly rejected by legacy systems (e.g., brackets, quotes).
@@ -47,7 +47,6 @@ To ensure this tool fits your security requirements, please review its intended 
 * **OS-Level Malware:** Keyloggers or screen-recorders bypass all web-application security layers.
 * **Clipboard History:** Clipboard auto-clear is "best-effort"; OS-level clipboard managers may still retain copies.
 * **Malicious Extensions:** Browser extensions often have permissions to read data directly from the screen.
-* **Insecure Contexts:** Browsers will disable the Web Crypto API on plain HTTP connections (except for `localhost`).
 
 ---
 
@@ -61,8 +60,6 @@ You do not need a web server at all to use this securely.
 1. Download the repository folder to your Windows or Mac machine.
 2. Unzip the contents of the repository
 3. Double-click index.html to open it directly in your web browser (Chrome, Edge, Safari, Firefox).
-
-The Web Crypto API works perfectly in this local file:/// context, ensuring maximum offline security.
 
 ### Method 2: Docker Compose 
 The repository includes a hardened NGINX configuration and a `docker-compose.yml` file. This drops all container privileges, mounts the files as read-only, and applies strict security headers.
@@ -90,8 +87,6 @@ If you want to quickly host the generator on your machine so other local devices
 ---
 
 ### 🌐 Advanced Deployment (Caddy with Automatic HTTPS) [Recommended]
-
-If you need network access (not just localhost) and want HTTPS without manually managing certificates, deploy with Caddy. This is the cleanest fix for the Web Crypto API's strict "secure context" requirement — Caddy auto-provisions and renews TLS certs (Let's Encrypt for public domains, an internal CA for local networks).
 
 > **Pick one Advanced Deployment method.** This Caddy path and the NGINX path above are alternatives — don't run both on the same host. The repo includes a `Caddyfile` with three options (localhost, local network, public domain); you pick one when you configure it.
 
