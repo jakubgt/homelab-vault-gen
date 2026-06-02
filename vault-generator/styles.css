@@ -210,3 +210,29 @@ body.dark-mode #insecure-warning {
     margin-top: -10px;
     margin-bottom: 10px;
 }
+
+/* --- Layout helpers: replace former inline style="" attributes so the strict
+   CSP (style-src 'self', no 'unsafe-inline') doesn't strip them. --- */
+.opt-col { display: flex; flex-direction: column; gap: 12px; }
+.opt-indent { margin-left: 24px; }
+.amount-row { display: flex; align-items: center; gap: 6px; }
+.amount-label { font-size: 13px; color: var(--text-color); }
+.label-row { display: flex; align-items: center; }
+.setting-row { display: flex; align-items: center; margin-top: 10px; }
+.mt-10 { margin-top: 10px; }
+.mb-15 { margin-bottom: 15px; }
+
+.num-mini {
+    width: 50px; padding: 2px; border: 1px solid var(--border-color);
+    border-radius: 4px; background: var(--input-bg); color: var(--text-color);
+}
+.num-clear {
+    width: 70px; margin-left: 5px; padding: 2px; box-sizing: border-box;
+    border: 1px solid var(--border-color); border-radius: 4px;
+    background: var(--input-bg); color: var(--text-color);
+}
+.select-inline {
+    margin-left: 10px; padding: 4px; border: 1px solid var(--border-color);
+    border-radius: 4px; background: var(--input-bg); color: var(--text-color);
+}
+.clear-select { margin-left: 10px; padding: 2px; }
