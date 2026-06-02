@@ -162,12 +162,24 @@
             </div>
         </div>
 
-        <button class="action-btn" id="generate-btn">Generate</button>
-        <button class="action-btn" id="copy-btn">Copy</button>
+        <div class="action-group">
+            <button class="action-btn" id="generate-btn">Generate</button>
+            <button class="action-btn" id="qr-btn" title="Show QR Code">📱 QR</button>
+            <button class="action-btn" id="copy-btn">Copy</button>
+        </div>
+
+        <div id="qr-modal" class="hidden">
+            <div class="qr-content">
+                <canvas id="qr-canvas"></canvas>
+                <div class="opt-desc mt-10">Scan to transfer securely.</div>
+                <button class="action-btn mt-10" id="qr-close">Close</button>
+            </div>
+        </div>
     </div>
 
     <div id="toast"></div>
 
+    <script src="qrious.min.js"></script>
     <script src="words.js"></script>
     <script src="app.js"></script>
 </body>
