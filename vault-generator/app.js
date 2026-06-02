@@ -25,7 +25,11 @@ const el = {
     optCustomSyms: document.getElementById('opt-custom-syms'),
     paranoidOverlay: document.getElementById('paranoid-overlay'),
     poolInfo: document.getElementById('pool-info'),
-    insecureWarning: document.getElementById('insecure-warning')
+    insecureWarning: document.getElementById('insecure-warning'),
+    qrBtn: document.getElementById('qr-btn'),
+    qrModal: document.getElementById('qr-modal'),
+    qrClose: document.getElementById('qr-close'),
+    qrCanvas: document.getElementById('qr-canvas')
 };
 
 const CHARS = {
@@ -793,6 +797,35 @@ function checkSecureContext() {
         el.insecureWarning.classList.remove('hidden');
     }
 }
+
+// --- QR CODE EXPORT ---
+el.qrBtn.addEventListener('click', () => {
+    const text = el.result.textContent;
+    if (!text) return;
+
+    // Check if qrious is loaded (failsafe)
+    if (typeof QRious === 'undefined') {
+        showToast("QR Library missing. Download qrious.min.js!");
+        return;
+    }
+
+    new QRious({
+        element: el.qrCanvas,
+        value: text,
+        size: 200,
+        background: 'white',
+        foreground: 'black'
+    });
+
+    el.qrModal.classList.remove('hidden');
+});
+
+el.qrClose.addEventListener('click', () => {
+    el.qrModal.classList.add('hidden');
+    // Wipe canvas for visual security
+    const ctx = el.qrCanvas.getContext('2d');
+    ctx.clearRect(0, 0, el.qrCanvas.width, el.qrCanvas.height);
+});
 
 // Init
 loadSettings();
