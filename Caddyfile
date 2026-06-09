@@ -15,7 +15,7 @@
         Permissions-Policy "clipboard-read=(), clipboard-write=(self)"
         Cross-Origin-Opener-Policy "same-origin"
         Cross-Origin-Resource-Policy "same-origin"
-        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';"
+        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'data:' 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';"
         Cache-Control "no-store, no-cache, must-revalidate, private"
         -Server
     }
@@ -28,7 +28,7 @@
 # on each client to silence the warning:
 #   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
 # ---------------------------------------------------------------------------
-https://HOST IP {
+https://vault.lan {
     tls internal
     root * /var/www/html
     file_server
