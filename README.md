@@ -29,7 +29,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
 * **Precision Length Controls:** Features a manual numeric input and full-width slider for exact counts — characters (4–128) in password mode, words in passphrase (3–20) and username (1–10) modes.
 * **Keyboard Shortcuts:** Instantly generate a new password, passphrase, or username at any time simply by pressing the `Spacebar`.
-* **Air-Gapped QR Code Export:** Instantly render generated credentials as a high-contrast QR code directly on your screen. This allows you to securely scan passwords into a mobile device's authenticator or password manager using the camera, completely bypassing the clipboard and local network. The rendering `<canvas>` is actively wiped from memory the moment the modal is closed to prevent visual residue.
+* **Air-Gapped QR Code Export:** Instantly render generated credentials as a high-contrast QR code directly on your screen. This allows you to securely scan passwords into a mobile device's authenticator or password manager using the camera, completely bypassing the clipboard and local network. For enhanced visual security, the generated `<canvas>` element is completely destroyed and purged from the DOM the moment the modal is closed—rather than just clearing its 2D context—ensuring absolutely zero visual residue remains in memory.
 
 ---
 
