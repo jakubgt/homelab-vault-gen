@@ -101,7 +101,7 @@ If you want to quickly host the generator on your machine so other local devices
 ### 1. Install Caddy
 Official Debian/Ubuntu repository:
 ```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl git ufw
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl git ufw rsync
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
@@ -178,10 +178,10 @@ If you already use a reverse proxy (like NGINX Proxy Manager, Traefik, or Cloudf
 > **Pick one Advanced Deployment method.** This NGINX path and the Caddy path above are alternatives — don't run both on the same host.
 
 ### 1. Prepare the Environment
-Update your system and install NGINX and Git:
+Update your system and install NGINX, Git, and RSYNC:
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install nginx git ufw -y
+sudo apt install nginx git ufw rsync -y
 ```
 
 ### 2. Deploy the Code
