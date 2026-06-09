@@ -244,7 +244,7 @@ systemctl enable nginx
 This project ships a zero-dependency test suite that *proves* its core claims
 rather than asserting them. 
 
-**Automated Validation:** The `.github/workflows` CI/CD pipeline automatically verifies our test suite on every code push. Status: ![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)
+**Automated Validation:** The `.github/workflows` CI/CD pipeline automatically verifies our test suite on every code push. You can view the live status and full history of all test runs [here](https://github.com/jakubgt/homelab-vault-gen/actions). Status: ![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)
 
 **Manual Validation:** Run with Node (no install needed):
 
