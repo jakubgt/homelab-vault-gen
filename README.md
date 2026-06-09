@@ -242,7 +242,11 @@ systemctl enable nginx
 
 
 This project ships a zero-dependency test suite that *proves* its core claims
-rather than asserting them. Run it with Node (no install needed):
+rather than asserting them. 
+
+**Automated Validation:** The `.github/workflows` CI/CD pipeline automatically verifies our test suite on every code push. Status: ![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)
+
+**Manual Validation:** Run with Node (no install needed):
 
 ```bash
 node test.js
@@ -255,8 +259,6 @@ It validates:
 - **Wordlist integrity** (7,776 unique EFF words), which backs the passphrase
   entropy figure.
 - **Entropy math** against hand-computed values.
-
-**Automated Validation:** Every update is automatically verified by GitHub Actions. 
 
 ## 🧠 Why Build This?
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
