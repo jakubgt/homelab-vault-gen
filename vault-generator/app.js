@@ -18,9 +18,12 @@ const el = {
     tabPwd: document.getElementById('tab-pwd'),
     tabPass: document.getElementById('tab-pass'),
     tabUser: document.getElementById('tab-user'),
+    tabPattern: document.getElementById('tab-pattern'),
     pwdOpts: document.getElementById('pwd-options'),
     passOpts: document.getElementById('pass-options'),
     userOpts: document.getElementById('user-options'),
+    patternOpts: document.getElementById('pattern-options'),
+    patternInput: document.getElementById('pattern-input'),
     symInput: document.getElementById('sym-input'),
     optCustomSyms: document.getElementById('opt-custom-syms'),
     paranoidOverlay: document.getElementById('paranoid-overlay'),
@@ -29,7 +32,10 @@ const el = {
     qrBtn: document.getElementById('qr-btn'),
     qrModal: document.getElementById('qr-modal'),
     qrClose: document.getElementById('qr-close'),
-    qrContainer: document.getElementById('qr-container')
+    qrContainer: document.getElementById('qr-container'),
+    bulkCount: document.getElementById('bulk-count'),
+    exportCsvBtn: document.getElementById('export-csv-btn'),
+    exportTxtBtn: document.getElementById('export-txt-btn')
 };
 
 const CHARS = {
@@ -46,24 +52,16 @@ let lengths = { pwd: 24, pass: 6, user: 2 };
 let activeSecretBuffer = null;
 
 // --- WORKING-BUFFER WIPING (best-effort) ---
-// Zeroes the Uint8Array that holds the secret while it's being built, then drops
-// the reference. IMPORTANT: this is only ONE copy. Showing or copying a result
-// also creates immutable JS strings (result.textContent, the clipboard, the
-// fallback <textarea>) that the engine may duplicate internally and that cannot
-// be overwritten in place or force-freed from script. So this is a best-effort
-// reduction of in-memory residue over the buffer copy, NOT a guarantee the
-// secret is gone from memory. The README threat model spells this out.
 function wipeMemory() {
     if (activeSecretBuffer) {
-        crypto.getRandomValues(activeSecretBuffer); // cover with noise...
-        activeSecretBuffer.fill(0);                 // ...then zero
+        crypto.getRandomValues(activeSecretBuffer); 
+        activeSecretBuffer.fill(0);                 
         activeSecretBuffer = null;
     }
 }
 
 function wipeSecret() {
     wipeMemory();
-    // Clear the DOM content to ensure no visual traces remain
     el.result.textContent = "";
 }
 
@@ -87,11 +85,6 @@ function syncLength(e) {
 // --- CORE GENERATION ---
 function getSecureRandomInt(max) {
     const randomBytes = new Uint32Array(1);
-    // Rejection sampling: discard any value in the "remainder" tail of the
-    // uint32 range so the surviving values divide evenly by `max`. Without
-    // this, `% max` would over-represent low values (modulo bias) whenever
-    // 2^32 isn't a clean multiple of max. maxValid is the largest exact
-    // multiple of max that fits in a uint32; anything >= it gets re-rolled.
     const maxValid = Math.floor(4294967296 / max) * max;
     while (true) {
         crypto.getRandomValues(randomBytes);
@@ -99,27 +92,100 @@ function getSecureRandomInt(max) {
     }
 }
 
-// Read an integer from a numeric <input>, clamped to [min, max], falling back to
-// `def` when the field is blank or non-numeric. The length inputs are validated
-// on load (see loadSettings); these live num-count fields were not, which let a
-// blank or NaN value reach the buffer-size math -- new Uint8Array(NaN) yields a
-// zero-length buffer and a silently truncated/empty result.
 function readIntField(id, min, max, def) {
     const v = parseInt(document.getElementById(id).value, 10);
     if (!Number.isFinite(v)) return def;
     return Math.min(max, Math.max(min, v));
 }
 
+function parsePattern(patternStr) {
+    let tokens = [];
+    const tokenRegex = /(\[[^\]]+\]|\\[\[\]\{\}\\]|.)(?:\{(\d+)\})?/g;
+    let match;
+    
+    const expandCharset = (str) => {
+        let res = "";
+        for (let i = 0; i < str.length; i++) {
+            if (str[i+1] === '-' && i+2 < str.length) {
+                let start = str.charCodeAt(i);
+                let end = str.charCodeAt(i+2);
+                if (start <= end) {
+                    for (let c = start; c <= end; c++) res += String.fromCharCode(c);
+                }
+                i += 2; 
+            } else {
+                res += str[i];
+            }
+        }
+        return Array.from(new Set(res.split(''))).join('');
+    };
+
+    tokenRegex.lastIndex = 0;
+    while ((match = tokenRegex.exec(patternStr)) !== null) {
+        if (match[0] === '') { tokenRegex.lastIndex++; continue; } 
+        
+        let part = match[1];
+        let count = match[2] ? parseInt(match[2], 10) : 1;
+        
+        let pool = "";
+        if (part.startsWith('[') && part.endsWith(']')) {
+            pool = expandCharset(part.slice(1, -1));
+        } else if (part.startsWith('\\')) {
+            pool = part.length > 1 ? part[1] : part; 
+        } else {
+            pool = part; 
+        }
+        
+        if (pool.length > 0 && count > 0) tokens.push({ pool, count });
+    }
+    return tokens;
+}
+
+function generatePattern(skipDomUpdate = false) {
+    wipeMemory();
+    const patternStr = el.patternInput.value;
+    if (!patternStr) {
+        if (!skipDomUpdate) el.result.textContent = "Please enter a pattern.";
+        return null;
+    }
+
+    const tokens = parsePattern(patternStr);
+    let totalLen = tokens.reduce((sum, t) => sum + t.count, 0);
+
+    if (totalLen === 0) {
+        if (!skipDomUpdate) el.result.textContent = "Invalid pattern.";
+        return null;
+    }
+    if (totalLen > 1000) {
+        if (!skipDomUpdate) el.result.textContent = "Pattern too long (max 1000 chars).";
+        return null;
+    }
+
+    activeSecretBuffer = new Uint8Array(totalLen);
+    let offset = 0;
+    
+    for (let t of tokens) {
+        for (let i = 0; i < t.count; i++) {
+            activeSecretBuffer[offset++] = t.pool.charCodeAt(getSecureRandomInt(t.pool.length));
+        }
+    }
+    
+    const generatedText = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) el.result.textContent = generatedText;
+    return generatedText;
+}
+
 function generate() {
     if (currentMode === 'pwd') generatePassword();
+    else if (currentMode === 'pattern') generatePattern();
     else if (currentMode === 'pass') generatePassphrase();
     else if (currentMode === 'user') generateUsername();
     
     if (currentMode !== 'user') calculateEntropyAndStrength();
 }
 
-function generatePassword() {
-    wipeMemory(); // Securely free the previous buffer before allocating a new one
+function generatePassword(skipDomUpdate = false) {
+    wipeMemory(); 
     
     const len = lengths.pwd;
     let pool = "";
@@ -135,38 +201,26 @@ function generatePassword() {
             pool += symPool;
             activeSets.push(symPool);
         } else {
-            // Symbols requested but the custom pool is empty. Warn rather than
-            // silently dropping a whole character class the user asked for.
-            el.result.textContent = "Symbols enabled but pool is empty \u2014 add symbols or uncheck.";
-            return;
+            if (!skipDomUpdate) el.result.textContent = "Symbols enabled but pool is empty \u2014 add symbols or uncheck.";
+            return null;
         }
     }
     
     if (document.getElementById('opt-ambig').checked) {
         pool = pool.replace(/[lI1O0]/g, "");
-        // Re-derive each active set with ambiguous chars stripped, and drop any
-        // set that became empty (e.g. a custom symbol pool of only "l1O0").
-        // Otherwise the class guarantee below could never be satisfied and we'd
-        // silently fall through to the no-guarantee failsafe.
         for (let i = activeSets.length - 1; i >= 0; i--) {
             activeSets[i] = activeSets[i].replace(/[lI1O0]/g, "");
             if (activeSets[i].length === 0) activeSets.splice(i, 1);
         }
     }
 
-    if (!pool) { el.result.textContent = "Select a pool!"; return; }
-
-    // Infinite loop guard: Prevent freezing if length is mathematically smaller than required classes
-    if (len < activeSets.length) {
-        el.result.textContent = "Length must be \u2265 active sets!";
-        return;
-    }
+    if (!pool) { if (!skipDomUpdate) el.result.textContent = "Select a pool!"; return null; }
+    if (len < activeSets.length) { if (!skipDomUpdate) el.result.textContent = "Length must be \u2265 active sets!"; return null; }
 
     let isValid = false;
     let iterations = 0;
     const maxIterations = 1000;
     
-    // Convert activeSets to typed arrays for strict validation without strings
     let activeSetsCodes = activeSets.map(set => {
         let arr = new Uint8Array(set.length);
         for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
@@ -175,7 +229,6 @@ function generatePassword() {
 
     activeSecretBuffer = new Uint8Array(len);
 
-    // Strict character-class enforcement with Max Iteration Failsafe
     while (!isValid && iterations < maxIterations) {
         for (let i = 0; i < len; i++) {
             activeSecretBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
@@ -190,18 +243,18 @@ function generatePassword() {
         iterations++;
     }
 
-    // Failsafe path: if maxIterations draws never satisfied every class,
-    // emit a fresh random array WITHOUT the guarantee rather than hang.
     if (iterations >= maxIterations) {
         for (let i = 0; i < len; i++) {
             activeSecretBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
         }
     }
 
-    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
+    const generatedText = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) el.result.textContent = generatedText;
+    return generatedText;
 }
 
-function generatePassphrase() {
+function generatePassphrase(skipDomUpdate = false) {
     wipeMemory();
     
     const count = lengths.pass;
@@ -224,21 +277,12 @@ function generatePassphrase() {
         capMask.push(doCaps && (!randCaps || getSecureRandomInt(2) === 1));
     }
 
-    // Add appended numbers length
-    if (doNums && !randomizePositions) {
-        totalLength += (numCount * count);
-    }
-
-    // Add separators length
+    if (doNums && !randomizePositions) { totalLength += (numCount * count); }
     if (count > 1) {
         if (sepChoice === 'random') totalLength += (count - 1);
         else if (sepChoice !== '') totalLength += (sepChoice.length * (count - 1));
     }
-
-    // Add sprinkled numbers length
-    if (doNums && randomizePositions) {
-        totalLength += numCount;
-    }
+    if (doNums && randomizePositions) { totalLength += numCount; }
 
     activeSecretBuffer = new Uint8Array(totalLength);
     let offset = 0;
@@ -250,7 +294,7 @@ function generatePassphrase() {
     for (let i = 0; i < count; i++) {
         let word = WORDS[wordIndices[i]];
         if (capMask[i]) {
-            activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; // Capitalize
+            activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; 
             writeStr(word.slice(1));
         } else {
             writeStr(word);
@@ -271,7 +315,6 @@ function generatePassphrase() {
         }
     }
 
-    // In-place shifting for sprinkled numbers (avoids string/array allocation)
     if (doNums && randomizePositions) {
         let currentLen = offset;
         for (let i = 0; i < numCount; i++) {
@@ -284,10 +327,12 @@ function generatePassphrase() {
         }
     }
 
-    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
+    const generatedText = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) el.result.textContent = generatedText;
+    return generatedText;
 }
 
-function generateUsername() {
+function generateUsername(skipDomUpdate = false) {
     wipeMemory();
     
     const count = lengths.user;
@@ -308,10 +353,7 @@ function generateUsername() {
         totalLength += sep.length * (count - 1);
         if (doNums) totalLength += sep.length;
     }
-    
-    if (doNums) {
-        totalLength += numCount;
-    }
+    if (doNums) { totalLength += numCount; }
 
     activeSecretBuffer = new Uint8Array(totalLength);
     let offset = 0;
@@ -322,7 +364,7 @@ function generateUsername() {
 
     for (let i = 0; i < count; i++) {
         let word = WORDS[wordIndices[i]];
-        activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; // Capitalize
+        activeSecretBuffer[offset++] = word.charCodeAt(0) - 32; 
         writeStr(word.slice(1));
         
         if (i < count - 1 && sep !== '') {
@@ -337,18 +379,63 @@ function generateUsername() {
         }
     }
     
-    el.result.textContent = new TextDecoder().decode(activeSecretBuffer);
+    const generatedText = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) el.result.textContent = generatedText;
+    return generatedText;
+}
+
+// --- BULK EXPORT ---
+function bulkExport(format) {
+    let count = parseInt(el.bulkCount.value, 10);
+    if (isNaN(count) || count < 1) count = 50;
+    if (count > 10000) count = 10000;
+
+    const results = [];
+    for (let i = 0; i < count; i++) {
+        let res;
+        if (currentMode === 'pwd') res = generatePassword(true);
+        else if (currentMode === 'pattern') res = generatePattern(true);
+        else if (currentMode === 'pass') res = generatePassphrase(true);
+        else if (currentMode === 'user') res = generateUsername(true);
+        
+        if (res) results.push(res);
+        else break;
+    }
+
+    if (results.length === 0) {
+        showToast("Failed to generate. Check your settings.");
+        return;
+    }
+
+    el.result.textContent = results[results.length - 1];
+    if (currentMode !== 'user') calculateEntropyAndStrength();
+
+    let output = "";
+    if (format === 'csv') {
+        output = "Credential\n" + results.map(r => `"${r.replace(/"/g, '""')}"`).join("\n");
+    } else {
+        output = results.join("\n");
+    }
+
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `homelab_vault_${currentMode}_x${results.length}_${Date.now()}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${results.length} credentials!`);
+    wipeMemory(); 
 }
 
 // --- STATS AND ENTROPY ---
-// Turn a raw "seconds to exhaust the keyspace" figure into an honest, finite,
-// human-readable duration. Deliberately never returns "infinite" -- for very
-// large keyspaces it falls back to scientific-notation years, which is both
-// truthful and still clearly communicates "not happening".
 function formatCrackTime(seconds) {
     if (!isFinite(seconds)) return 'longer than the age of the universe';
     if (seconds < 1) return 'instant';
-    const MIN = 60, HOUR = 3600, DAY = 86400, YEAR = 31557600; // 365.25 days
+    const MIN = 60, HOUR = 3600, DAY = 86400, YEAR = 31557600;
     if (seconds < MIN)  return `${Math.round(seconds)} seconds`;
     if (seconds < HOUR) return `${Math.round(seconds / MIN)} minutes`;
     if (seconds < DAY)  return `${Math.round(seconds / HOUR)} hours`;
@@ -373,12 +460,9 @@ function calculateEntropyAndStrength() {
     
     if (currentMode === 'pass') {
         entropy = lengths.pass * Math.log2(WORDS.length);
-        
         if (document.getElementById('opt-pass-caps').checked && document.getElementById('opt-pass-caps-rand').checked) {
             entropy += lengths.pass; 
         }
-        // Random-symbol separator: each of the (count-1) gaps holds one of 11
-        // symbols, so each adds log2(11) bits. Fixed separators add nothing.
         if (document.getElementById('opt-pass-sep').value === 'random') {
             entropy += Math.max(0, lengths.pass - 1) * Math.log2(11);
         }
@@ -387,18 +471,21 @@ function calculateEntropyAndStrength() {
             let randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
             
             if (randomizePositions) {
-                // Count digit VALUES only (numCount * log2(10)). We deliberately
-                // do NOT add positional entropy: an attacker who knows the scheme
-                // can see which words carry trailing digits in the output, so
-                // position is not secret. Counting it would make the meter
-                // optimistic -- and for a strength meter, erring conservative is
-                // the only safe direction.
                 entropy += numCount * Math.log2(10);
             } else {
-                // If appending to EVERY word, we generate `numCount * lengths.pass` total random digits
                 entropy += (numCount * lengths.pass) * Math.log2(10);
             }
         }
+    } else if (currentMode === 'pattern') {
+        const tokens = parsePattern(el.patternInput.value);
+        let totalLen = 0;
+        for (let t of tokens) {
+            if (t.pool.length > 1) {
+                entropy += t.count * Math.log2(t.pool.length);
+            }
+            totalLen += t.count;
+        }
+        if (el.poolInfo) el.poolInfo.textContent = `Pattern Length: ${totalLen} chars`;
     } else {
         let poolSize = 0;
         if (document.getElementById('opt-upper').checked) poolSize += 26;
@@ -408,9 +495,6 @@ function calculateEntropyAndStrength() {
             const uniqueSyms = new Set(el.symInput.value.split('')).size;
             poolSize += uniqueSyms;
         }
-        // Ambiguous-stripping removes l, I, 1, O, 0 — but only the ones
-        // actually present in the selected sets. Build the pool string and
-        // strip it so the count is exact rather than a flat -5.
         if (document.getElementById('opt-ambig').checked) {
             let poolStr = "";
             if (document.getElementById('opt-upper').checked) poolStr += CHARS.upper;
@@ -424,24 +508,13 @@ function calculateEntropyAndStrength() {
     }
     
     el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
-    // The visual bar saturates at 128 bits; high-word-count passphrases can far
-    // exceed that, so the bar pins at full. The numeric readout above is the
-    // source of truth — the bar is just a quick visual cue.
     el.entropyBar.style.width = `${Math.min(100, (entropy/128)*100)}%`;
     
     let strength = "Weak";
     let colorClass = "strength-weak";
     let barColor = "#dc3545";
-
-    // Single fixed rate: 100 billion guesses/sec (1e11). This assumes a FAST,
-    // unsalted hash (one SHA-family round on commodity GPUs). A slow KDF such as
-    // bcrypt/argon2 would be many orders of magnitude slower, so this is a rough
-    // yardstick, not a guarantee -- see the README crack-time note. (The old code
-    // used 1e10, which silently disagreed with the README's stated 100B/s.)
     const seconds = Math.pow(2, entropy) / 1e11;
 
-    // The qualitative band drives the label + colour; the time itself is computed
-    // by formatCrackTime so we never print a dishonest word like "Infinite".
     if (entropy < 40) {
         strength = "Weak"; colorClass = "strength-weak"; barColor = "#dc3545";
     } else if (seconds < 86400) {
@@ -468,27 +541,20 @@ function showToast(message) {
     setTimeout(() => { toast.className = ''; }, 3000);
 }
 
-// Fallback for non-HTTPS homelab environments
 function fallbackCopyTextToClipboard(text) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
+    textArea.style.top = "0"; textArea.style.left = "0"; textArea.style.position = "fixed";
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-    try {
-        document.execCommand('copy');
-    } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
-    }
+    try { document.execCommand('copy'); } catch (err) { console.error('Fallback: Oops, unable to copy', err); }
     document.body.removeChild(textArea);
 }
 
 function triggerCopyFeedback() {
     const textToCopy = el.result.textContent;
-    if (!textToCopy) return; // Prevent copying empty strings
+    if (!textToCopy) return; 
 
     let delay;
     if (el.clearTime.value === 'custom') {
@@ -504,17 +570,8 @@ function triggerCopyFeedback() {
         el.copyBtn.textContent = `Copied! (${delay/1000}s)`;
         clearTimeout(clearTimer);
         clearTimer = setTimeout(() => {
-            // Memory & DOM Wipe Target
             wipeSecret();
-
-            // Two-step wipe: overwrite with random cover text first, then
-            // clear. Some OS-level clipboard managers keep history; a straight
-            // clear can leave the real secret as the "previous" entry, whereas
-            // overwriting first pushes cover into that slot. Random content of
-            // varied length is used (rather than a fixed "0000..." string) so
-            // the wipe entry isn't itself a recognizable "a secret was here"
-            // signature. Best-effort only (see README threat model).
-            const garbageLen = 24 + getSecureRandomInt(24); // 24-47 chars
+            const garbageLen = 24 + getSecureRandomInt(24);
             const garbageChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
             let garbage = "";
             for (let i = 0; i < garbageLen; i++) garbage += garbageChars[getSecureRandomInt(garbageChars.length)];
@@ -527,16 +584,13 @@ function triggerCopyFeedback() {
                 fallbackCopyTextToClipboard(garbage);
                 setTimeout(() => fallbackCopyTextToClipboard(""), 50);
             }
-
             el.copyBtn.textContent = "Copy";
             showToast("Clipboard and memory cleared.");
         }, delay);
     };
 
-    // Attempt modern async clipboard first, fallback to execCommand for HTTP/IP access
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(textToCopy).then(onSuccess).catch(err => {
-            console.error('Async: Could not copy text: ', err);
             fallbackCopyTextToClipboard(textToCopy);
             onSuccess();
         });
@@ -554,18 +608,18 @@ function toggleNestedInputs() {
 
 function updateUI() {
     el.tabPwd.classList.toggle('active', currentMode === 'pwd');
+    el.tabPattern.classList.toggle('active', currentMode === 'pattern');
     el.tabPass.classList.toggle('active', currentMode === 'pass');
     el.tabUser.classList.toggle('active', currentMode === 'user');
     
     el.pwdOpts.classList.toggle('hidden', currentMode !== 'pwd');
+    el.patternOpts.classList.toggle('hidden', currentMode !== 'pattern');
     el.passOpts.classList.toggle('hidden', currentMode !== 'pass');
     el.userOpts.classList.toggle('hidden', currentMode !== 'user');
     
     if (currentMode === 'user') {
-        el.lengthContainer.classList.remove('hidden'); 
-        el.length.classList.remove('hidden');
+        el.lengthContainer.classList.remove('hidden'); el.length.classList.remove('hidden');
         el.metricsContainer.classList.add('hidden'); 
-        
         el.lengthLabel.textContent = "Words";
         el.length.min = el.lengthNum.min = 1;
         el.length.max = el.lengthNum.max = 10;
@@ -573,33 +627,33 @@ function updateUI() {
         el.lengthContainer.classList.remove('hidden');
         el.length.classList.remove('hidden');
         el.metricsContainer.classList.remove('hidden'); 
-        
         el.lengthLabel.textContent = "Words";
         el.length.min = el.lengthNum.min = 3;
         el.length.max = el.lengthNum.max = 20;
+    } else if (currentMode === 'pattern') {
+        el.lengthContainer.classList.add('hidden');
+        el.length.classList.add('hidden');
+        el.metricsContainer.classList.remove('hidden'); 
     } else {
         el.lengthContainer.classList.remove('hidden');
         el.length.classList.remove('hidden');
         el.metricsContainer.classList.remove('hidden'); 
-        
         el.lengthLabel.textContent = "Length";
         el.length.min = el.lengthNum.min = 4;
         el.length.max = el.lengthNum.max = 128;
     }
     
-    el.length.value = el.lengthNum.value = lengths[currentMode];
+    if (currentMode !== 'pattern') el.length.value = el.lengthNum.value = lengths[currentMode];
     toggleNestedInputs();
     generate();
 }
 
-// --- THEME ---
 function toggleTheme() {
     const isDark = document.body.classList.toggle('dark-mode');
     el.themeBtn.textContent = isDark ? '☀️' : '🌙';
     try { localStorage.setItem('vault_theme', isDark ? 'dark' : 'light'); } catch (e) {}
 }
 
-// --- PERSISTENT SETTINGS ---
 function saveSettings() {
     if (document.getElementById('opt-paranoid').checked) return; 
     
@@ -607,6 +661,7 @@ function saveSettings() {
         lengths: lengths,
         clearTime: el.clearTime.value,
         customClearTime: el.customClearTime.value,
+        bulkCount: el.bulkCount.value,
         upper: document.getElementById('opt-upper').checked,
         lower: document.getElementById('opt-lower').checked,
         nums: document.getElementById('opt-nums').checked,
@@ -623,7 +678,8 @@ function saveSettings() {
         userNums: document.getElementById('opt-user-nums').checked,
         userNumCount: document.getElementById('user-num-count').value,
         userSep: document.getElementById('opt-user-sep').value,
-        symPool: el.symInput.value
+        symPool: el.symInput.value,
+        patternStr: el.patternInput.value
     };
     try { localStorage.setItem('vault_settings', JSON.stringify(settings)); } catch(e) {}
 }
@@ -634,58 +690,46 @@ function loadSettings() {
         if (savedTheme === 'dark') {
             document.body.classList.add('dark-mode');
             el.themeBtn.textContent = '☀️';
-        } else if (savedTheme === null &&
-                   window.matchMedia &&
-                   window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            // No explicit choice saved: follow the OS/browser preference.
+        } else if (savedTheme === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.body.classList.add('dark-mode');
             el.themeBtn.textContent = '☀️';
         }
         
         const saved = JSON.parse(localStorage.getItem('vault_settings'));
         if (saved) {
-            // Validate restored lengths before they reach Math.log2 / loops.
-            // localStorage is user-visible and editable, and a partial/corrupt
-            // write could otherwise feed a string or undefined into the math.
-            // Accept only in-range integers; fall back to defaults otherwise.
             if (saved.lengths && typeof saved.lengths === 'object') {
-                const clamp = (v, min, max, def) =>
-                    (Number.isInteger(v) && v >= min && v <= max) ? v : def;
+                const clamp = (v, min, max, def) => (Number.isInteger(v) && v >= min && v <= max) ? v : def;
                 lengths.pwd  = clamp(saved.lengths.pwd, 4, 128, 24);
                 lengths.pass = clamp(saved.lengths.pass, 3, 20, 6);
                 lengths.user = clamp(saved.lengths.user, 1, 10, 2);
             }
-            
             if (saved.clearTime !== undefined) {
                 el.clearTime.value = saved.clearTime;
                 el.customClearTime.classList.toggle('hidden', saved.clearTime !== 'custom');
             }
             if (saved.customClearTime !== undefined) el.customClearTime.value = saved.customClearTime;
-            
+            if (saved.bulkCount !== undefined) el.bulkCount.value = saved.bulkCount;
             if (saved.upper !== undefined) document.getElementById('opt-upper').checked = saved.upper;
             if (saved.lower !== undefined) document.getElementById('opt-lower').checked = saved.lower;
             if (saved.nums !== undefined) document.getElementById('opt-nums').checked = saved.nums;
             if (saved.syms !== undefined) document.getElementById('opt-syms').checked = saved.syms;
             if (saved.ambig !== undefined) document.getElementById('opt-ambig').checked = saved.ambig;
             if (saved.safe !== undefined) document.getElementById('opt-safe').checked = saved.safe;
-            
             if (saved.customSyms !== undefined) {
                 el.optCustomSyms.checked = saved.customSyms;
                 el.symInput.classList.toggle('hidden', !saved.customSyms);
             }
-
             if (saved.passCaps !== undefined) document.getElementById('opt-pass-caps').checked = saved.passCaps;
             if (saved.passCapsRand !== undefined) document.getElementById('opt-pass-caps-rand').checked = saved.passCapsRand;
             if (saved.passNums !== undefined) document.getElementById('opt-pass-nums').checked = saved.passNums;
             if (saved.passNumsRand !== undefined) document.getElementById('opt-pass-nums-rand').checked = saved.passNumsRand;
             if (saved.passNumCount !== undefined) document.getElementById('pass-num-count').value = saved.passNumCount;
             if (saved.passSep !== undefined) document.getElementById('opt-pass-sep').value = saved.passSep;
-            
             if (saved.userNums !== undefined) document.getElementById('opt-user-nums').checked = saved.userNums;
             if (saved.userNumCount !== undefined) document.getElementById('user-num-count').value = saved.userNumCount;
             if (saved.userSep !== undefined) document.getElementById('opt-user-sep').value = saved.userSep;
-            
             if (saved.symPool !== undefined) el.symInput.value = saved.symPool;
+            if (saved.patternStr !== undefined) el.patternInput.value = saved.patternStr;
         }
     } catch(e) {}
 }
@@ -693,49 +737,32 @@ function loadSettings() {
 // --- LISTENERS ---
 el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
-
-// Both buttons now trigger the updated fallback-enabled copy function
 el.copyBtn.addEventListener('click', triggerCopyFeedback);
 el.resultContainer.addEventListener('click', triggerCopyFeedback); 
-
 el.length.addEventListener('input', syncLength);
 el.lengthNum.addEventListener('input', syncLength);
-
 el.tabPwd.addEventListener('click', () => { currentMode = 'pwd'; updateUI(); saveSettings(); });
 el.tabPass.addEventListener('click', () => { currentMode = 'pass'; updateUI(); saveSettings(); });
 el.tabUser.addEventListener('click', () => { currentMode = 'user'; updateUI(); saveSettings(); });
-
-el.clearTime.addEventListener('change', (e) => {
-    el.customClearTime.classList.toggle('hidden', e.target.value !== 'custom');
-    saveSettings();
-});
+el.tabPattern.addEventListener('click', () => { currentMode = 'pattern'; updateUI(); saveSettings(); });
+el.patternInput.addEventListener('input', () => { generate(); saveSettings(); });
+el.clearTime.addEventListener('change', (e) => { el.customClearTime.classList.toggle('hidden', e.target.value !== 'custom'); saveSettings(); });
 el.customClearTime.addEventListener('input', saveSettings);
-
-// Nested Checkbox Reveal Listeners
 document.getElementById('opt-pass-caps').addEventListener('change', () => { toggleNestedInputs(); generate(); saveSettings(); });
 document.getElementById('opt-pass-nums').addEventListener('change', () => { toggleNestedInputs(); generate(); saveSettings(); });
 document.getElementById('opt-user-nums').addEventListener('change', () => { toggleNestedInputs(); generate(); saveSettings(); });
-
-// Custom Symbols & Sanitize
-el.symInput.addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\s+/g, ''); // Disallow whitespace
-});
-
+el.symInput.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\s+/g, ''); });
 el.optCustomSyms.addEventListener('change', (e) => {
     el.symInput.classList.toggle('hidden', !e.target.checked);
     if (!e.target.checked) el.symInput.value = document.getElementById('opt-safe').checked ? SAFE_SYMS : DEFAULT_SYMS;
     generate();
     saveSettings();
 });
-
-// Safe Symbols Filter
 document.getElementById('opt-safe').addEventListener('change', (e) => {
     if (e.target.checked) el.symInput.value = SAFE_SYMS;
     else el.symInput.value = DEFAULT_SYMS;
     generate();
 });
-
-// Regenerate and Save immediately if any options change
 document.querySelectorAll('input, select').forEach(input => {
     if (input.type === 'range' || input.type === 'number') {
         input.addEventListener('change', saveSettings); 
@@ -744,36 +771,17 @@ document.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('change', () => { generate(); saveSettings(); });
     }
 });
-
-// Paranoid Mode Aggressive Wipe
 document.getElementById('opt-paranoid').addEventListener('change', (e) => {
     document.body.classList.toggle('paranoid-active', e.target.checked);
     el.paranoidOverlay.classList.toggle('hidden', !e.target.checked);
-    if (e.target.checked) {
-        try { localStorage.clear(); } catch(err) {}
-    } else {
-        saveSettings();
-    }
+    if (e.target.checked) { try { localStorage.clear(); } catch(err) {} } else { saveSettings(); }
 });
-
-// Paranoid mode treats leaving the page as a wipe trigger. beforeunload
-// covers close/refresh/navigate; visibilitychange covers tab-switch and
-// minimize. Both execute cryptographic buffer wipes and clear the DOM.
 window.addEventListener('beforeunload', () => {
-    if (document.getElementById('opt-paranoid').checked) {
-        wipeSecret();
-        try { localStorage.clear(); } catch(err) {}
-    }
+    if (document.getElementById('opt-paranoid').checked) { wipeSecret(); try { localStorage.clear(); } catch(err) {} }
 });
-
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden && document.getElementById('opt-paranoid').checked) {
-        wipeSecret();
-    }
+    if (document.hidden && document.getElementById('opt-paranoid').checked) { wipeSecret(); }
 });
-
-// Spacebar regenerates (power-user shortcut). Ignored while typing in an
-// input/select/textarea so it doesn't hijack the space key in fields.
 document.addEventListener('keydown', (e) => {
     if (e.code !== 'Space') return;
     const tag = (document.activeElement && document.activeElement.tagName) || '';
@@ -781,56 +789,29 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     generate();
 });
-
-// The ONLY crypto primitive this app uses is crypto.getRandomValues, which is
-// available in every context -- https, http, and file://. SubtleCrypto is the
-// part gated behind a secure context, and we never touch it. So the only thing
-// that actually prevents generation is getRandomValues being missing entirely
-// (a very old or locked-down browser). Warn on that alone -- keying the banner
-// off !isSecureContext (the previous behaviour) cried wolf on file:// and plain
-// HTTP, where generation works perfectly and only the async clipboard degrades
-// to the legacy execCommand copy path.
 function checkSecureContext() {
     if (!el.insecureWarning) return;
     const cryptoOk = window.crypto && typeof window.crypto.getRandomValues === 'function';
-    if (!cryptoOk) {
-        el.insecureWarning.classList.remove('hidden');
-    }
+    if (!cryptoOk) el.insecureWarning.classList.remove('hidden');
 }
+el.exportCsvBtn.addEventListener('click', () => bulkExport('csv'));
+el.exportTxtBtn.addEventListener('click', () => bulkExport('txt'));
+el.bulkCount.addEventListener('input', saveSettings);
 
 // --- QR CODE EXPORT ---
 el.qrBtn.addEventListener('click', () => {
     const text = el.result.textContent;
     if (!text) return;
-
-    // Check if qrcode.js is loaded (failsafe)
-    if (typeof QRCode === 'undefined') {
-        showToast("QR Library missing. Download qrcode.min.js!");
-        return;
-    }
-
-    // Clear any previous QR code from the container
+    if (typeof QRCode === 'undefined') { showToast("QR Library missing. Download qrcode.min.js!"); return; }
     el.qrContainer.innerHTML = "";
-
-    new QRCode(el.qrContainer, {
-        text: text,
-        width: 200,
-        height: 200,
-        colorDark : "#000000",
-        colorLight : "#ffffff",
-        correctLevel : QRCode.CorrectLevel.M
-    });
-
+    new QRCode(el.qrContainer, { text: text, width: 200, height: 200, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.M });
     el.qrModal.classList.remove('hidden');
 });
-
 el.qrClose.addEventListener('click', () => {
     el.qrModal.classList.add('hidden');
-    // Wipe DOM container for visual security (matches your paranoid mode logic)
     el.qrContainer.innerHTML = "";
 });
 
-// Init
 loadSettings();
 updateUI();
 checkSecureContext();
