@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/vault-icon.png" alt="Homelab Vault Logo" width="140">
+</p>
+
 # 🔐 Homelab Vault: Secure Offline Password & Passphrase Generator
 
 ![license](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -7,7 +11,7 @@ A hyper-secure, offline password and diceware generator built specifically for s
 Unlike many online generators or complex Webpack-compiled tools, this generator uses pure Vanilla JavaScript and relies strictly on the Web Crypto API. It has been architecturally hardened to support a bulletproof Content Security Policy (CSP) with zero inline scripts or styles. It is designed to be hosted locally, completely air-gapped from the internet, with zero external dependencies, CDNs, or trackers.
 
 <p align="center">
-  <img src="Preview.png" alt="Project Preview" width="600">
+  <img src="assets/Preview.png" alt="Project Preview" width="600">
 </p>
 
 ## ✨ Features
@@ -254,6 +258,12 @@ It validates:
 Many open-source password generators are either bloated with frameworks, pull external fonts/scripts from CDNs, or use naive generation logic (like standard modulo math) that introduces cryptographic bias.
 
 This project strips everything away to leave only the bare essentials: mathematically sound rejection sampling wired to a bulletproof, indestructible UI. It's the perfect utility to embed in a local network for generating secure credentials for new Docker containers, VMs, or databases.
+
+### 🖼️ Dashboard Icon
+If you are adding this generator to a personal homelab startpage or dashboard (such as Heimdall, Homarr, Dashy, or Organizr), you can use this raw URL to fetch the high-resolution transparent icon directly:
+
+```text
+[https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/assets/vault-icon.png](https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/assets/vault-icon.png)
 
 ## 📄 License
 This project is open-source and available under the MIT License. Feel free to fork, modify, and host it in your own labs!
