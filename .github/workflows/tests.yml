@@ -13,14 +13,7 @@ jobs:
       
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      # Debugging: This prints the working directory and lists all files
-      # so we can confirm 'test.js' is exactly where we expect it.
-      - name: Debug - Verify environment
-        run: |
-          pwd
-          ls -la
+          node-version: '22'
 
       # No dependencies to install — test.js is pure Node.
       - name: Run test suite
