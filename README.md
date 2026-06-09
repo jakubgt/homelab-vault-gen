@@ -263,7 +263,8 @@ This project strips everything away to leave only the bare essentials: mathemati
 If you are adding this generator to a personal homelab startpage or dashboard (such as Heimdall, Homarr, Dashy, or Organizr), you can use this raw URL to fetch the high-resolution transparent icon directly:
 
 ```text
-[https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/assets/vault-icon.png](https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/assets/vault-icon.png)
+https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/assets/vault-icon.png
+```
 
 ## 📄 License
 This project is open-source and available under the MIT License. Feel free to fork, modify, and host it in your own labs!
