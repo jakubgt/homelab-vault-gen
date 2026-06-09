@@ -29,7 +29,7 @@ const el = {
     qrBtn: document.getElementById('qr-btn'),
     qrModal: document.getElementById('qr-modal'),
     qrClose: document.getElementById('qr-close'),
-    qrCanvas: document.getElementById('qr-canvas')
+    qrContainer: document.getElementById('qr-container')
 };
 
 const CHARS = {
@@ -803,18 +803,22 @@ el.qrBtn.addEventListener('click', () => {
     const text = el.result.textContent;
     if (!text) return;
 
-    // Check if qrious is loaded (failsafe)
-    if (typeof QRious === 'undefined') {
-        showToast("QR Library missing. Download qrious.min.js!");
+    // Check if qrcode.js is loaded (failsafe)
+    if (typeof QRCode === 'undefined') {
+        showToast("QR Library missing. Download qrcode.min.js!");
         return;
     }
 
-    new QRious({
-        element: el.qrCanvas,
-        value: text,
-        size: 200,
-        background: 'white',
-        foreground: 'black'
+    // Clear any previous QR code from the container
+    el.qrContainer.innerHTML = "";
+
+    new QRCode(el.qrContainer, {
+        text: text,
+        width: 200,
+        height: 200,
+        colorDark : "#000000",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.M
     });
 
     el.qrModal.classList.remove('hidden');
@@ -822,9 +826,8 @@ el.qrBtn.addEventListener('click', () => {
 
 el.qrClose.addEventListener('click', () => {
     el.qrModal.classList.add('hidden');
-    // Wipe canvas for visual security
-    const ctx = el.qrCanvas.getContext('2d');
-    ctx.clearRect(0, 0, el.qrCanvas.width, el.qrCanvas.height);
+    // Wipe DOM container for visual security (matches your paranoid mode logic)
+    el.qrContainer.innerHTML = "";
 });
 
 // Init
