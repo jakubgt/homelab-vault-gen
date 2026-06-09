@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Homelab Vault Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <button class="theme-toggle" id="theme-btn" title="Toggle Theme">🌙</button>
+        <h2>Secure Generator</h2>
+        
+        <div class="tabs">
+            <button id="tab-pwd" class="tab-btn active">Password</button>
+            <button id="tab-pass" class="tab-btn">Passphrase</button>
+            <button id="tab-user" class="tab-btn">Username</button>
+            <button id="tab-pattern" class="tab-btn">Pattern</button>
+        </div>
+        
+        <div id="insecure-warning" class="hidden">
+            ⚠️ This browser doesn't expose a secure random source
+            (<code>crypto.getRandomValues</code>), so secure generation isn't
+            available here. Use a current version of Chrome, Edge, Firefox, or
+            Safari. (Plain <strong>http</strong> and <code>file://</code> are
+            fine — only an outdated/locked-down browser triggers this.)
+        </div>
+
+        <div id="result-container" title="Click to copy">
+            <div id="result"></div>
+            <div id="paranoid-overlay" class="hidden">Hover to Reveal</div>
+        </div>
+        
+        <div id="metrics-container">
+            <div class="stats-row">
+                <span id="entropy-text">Entropy: 0 bits</span>
+                <span id="strength-text" class="strength-weak">Strength: Weak</span>
+            </div>
+            <div class="entropy-bar-container">
+                <div id="entropy-bar"></div>
+            </div>
+            <div class="crack-estimation">
+                <span id="crack-text">Estimated Time to Crack: Instant</span>
+            </div>
+            <div id="pool-info" class="pool-info"></div>
+        </div>
+
+        <div class="controls">
+            <div class="length-header" id="length-container">
+                <span id="length-label">Length</span>
+                <input type="number" id="length-num" min="4" max="128" value="24">
+            </div>
+            <input type="range" id="length" min="4" max="128" value="24" class="full-slider">
+
+            <div id="pwd-options" class="options-grid">
+                <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
+                <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
+                <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
+                <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
+                
+                <div class="full-width-opt">
+                    <label><input type="checkbox" id="opt-ambig"> Avoid Ambiguous Characters</label>
+                    <div class="opt-desc">Excludes visually similar letters and numbers (l, I, 1, O, 0)</div>
+                </div>
+                
+                <div class="full-width-opt">
+                    <label><input type="checkbox" id="opt-safe"> Terminal / YAML Safe</label>
+                    <div class="opt-desc">Excludes quotes, brackets, and script-breaking symbols</div>
+                </div>
+
+                <div class="full-width-opt custom-sym-container">
+                    <label><input type="checkbox" id="opt-custom-syms"> Custom Symbol Pool</label>
+                    <div class="opt-desc">Add or omit specific characters to meet strict password requirements.</div>
+                    <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
+                </div>
+            </div>
+
+            <div id="pattern-options" class="options-grid hidden">
+                <div class="full-width-opt">
+                    <label class="sym-label">Pattern Format</label>
+                    <div class="opt-desc">Define structure using ranges (e.g. <code>[A-Z]</code>, <code>[0-9]</code>) and repetition (e.g. <code>{4}</code>). Literal characters like <code>-</code> or <code>_</code> are included as-is.<br>Example: <code>[A-Z]{3}-[0-9]{4}-[a-z]{5}</code></div>
+                    <input type="text" id="pattern-input" class="full-width-input" value="[A-Z]{3}-[0-9]{4}-[a-z]{5}">
+                </div>
+            </div>
+
+            <div id="pass-options" class="options-grid hidden">
+                <div class="opt-col">
+                    <div>
+                        <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize Words</label>
+                        <div class="opt-desc">Starts words with an uppercase letter.</div>
+                    </div>
+                    <div id="opt-pass-caps-rand-wrapper" class="opt-indent">
+                        <label><input type="checkbox" id="opt-pass-caps-rand"> Randomize Caps</label>
+                        <div class="opt-desc">Applies capitals randomly instead of all words.</div>
+                    </div>
+                </div>
+
+                <div class="opt-col">
+                    <div>
+                        <label><input type="checkbox" id="opt-pass-nums"> Insert Numbers</label>
+                        <div class="opt-desc">Appends numbers to the generated phrase.</div>
+                    </div>
+                    <div id="pass-num-options-wrapper" class="hidden opt-indent opt-col">
+                        <div>
+                            <label><input type="checkbox" id="opt-pass-nums-rand" checked> Randomize Numbers</label>
+                            <div class="opt-desc">Sprinkles numbers randomly instead of appending to every word.</div>
+                        </div>
+                        <div class="amount-row">
+                            <span class="amount-label">Amount:</span> 
+                            <input type="number" id="pass-num-count" min="1" max="10" value="2" class="num-mini">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="full-width-opt mt-10">
+                    <label>Separator: 
+                        <select id="opt-pass-sep" class="select-inline">
+                            <option value="-">Hyphen (-)</option>
+                            <option value="_">Underscore (_)</option>
+                            <option value=".">Period (.)</option>
+                            <option value=" ">Space</option>
+                            <option value="random">Random Symbol (+entropy)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <div id="user-options" class="options-grid hidden">
+                <div class="opt-col">
+                    <div>
+                        <label><input type="checkbox" id="opt-user-nums" checked> Append Numbers</label>
+                        <div class="opt-desc">Adds random digits to the end of the username.</div>
+                    </div>
+                    <div id="user-num-count-wrapper" class="opt-indent amount-row">
+                        <span class="amount-label">Amount:</span> 
+                        <input type="number" id="user-num-count" min="1" max="9" value="3" class="num-mini">
+                    </div>
+                </div>
+
+                <div class="opt-col">
+                    <label class="label-row">Separator: 
+                        <select id="opt-user-sep" class="select-inline">
+                            <option value="">None</option>
+                            <option value="-">Hyphen (-)</option>
+                            <option value="_">Underscore (_)</option>
+                            <option value=".">Period (.)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="full-width-opt mb-15">
+                <label><input type="checkbox" id="opt-paranoid"> Paranoid Mode</label>
+                <div class="opt-desc">Disables all saving, blurs result until hovered, and auto-clears if you switch browser tabs.</div>
+            </div>
+
+            <div class="setting-row">
+                <label for="clear-time">Auto-Clear:</label>
+                <select id="clear-time" class="clear-select">
+                    <option value="30000">30 Seconds</option>
+                    <option value="60000" selected>60 Seconds</option>
+                    <option value="300000">5 Minutes</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                <input type="number" id="custom-clear-time" class="hidden num-clear" min="1" placeholder="Secs">
+            </div>
+
+            <div class="setting-row">
+                <label for="bulk-count">Bulk Export:</label>
+                <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50">
+                <button class="action-btn bulk-btn" id="export-csv-btn">.CSV</button>
+                <button class="action-btn bulk-btn" id="export-txt-btn">.TXT</button>
+            </div>
+        </div>
+
+        <div class="action-group">
+            <button class="action-btn" id="generate-btn">Generate</button>
+            <button class="action-btn" id="qr-btn" title="Show QR Code">📱 QR</button>
+            <button class="action-btn" id="copy-btn">Copy</button>
+        </div>
+
+        <div id="qr-modal" class="hidden">
+            <div class="qr-content">
+                <div id="qr-container" style="background: white; padding: 10px; border-radius: 4px;"></div>
+                <div class="opt-desc mt-10">Scan to transfer securely.</div>
+                <button class="action-btn mt-10" id="qr-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="qrcode.min.js"></script>
+    <script src="words.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
