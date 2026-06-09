@@ -18,6 +18,7 @@
             <button id="tab-pwd" class="tab-btn active">Password</button>
             <button id="tab-pass" class="tab-btn">Passphrase</button>
             <button id="tab-user" class="tab-btn">Username</button>
+            <button id="tab-pattern" class="tab-btn">Pattern</button>
         </div>
         
         <div id="insecure-warning" class="hidden">
@@ -74,6 +75,14 @@
                     <label><input type="checkbox" id="opt-custom-syms"> Custom Symbol Pool</label>
                     <div class="opt-desc">Add or omit specific characters to meet strict password requirements.</div>
                     <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&*()-_=+[]{};:,.<>/?|~">
+                </div>
+            </div>
+
+            <div id="pattern-options" class="options-grid hidden">
+                <div class="full-width-opt">
+                    <label class="sym-label">Pattern Format</label>
+                    <div class="opt-desc">Define structure using ranges (e.g. <code>[A-Z]</code>, <code>[0-9]</code>) and repetition (e.g. <code>{4}</code>). Literal characters like <code>-</code> or <code>_</code> are included as-is.<br>Example: <code>[A-Z]{3}-[0-9]{4}-[a-z]{5}</code></div>
+                    <input type="text" id="pattern-input" class="full-width-input" value="[A-Z]{3}-[0-9]{4}-[a-z]{5}">
                 </div>
             </div>
 
@@ -159,6 +168,13 @@
                     <option value="custom">Custom...</option>
                 </select>
                 <input type="number" id="custom-clear-time" class="hidden num-clear" min="1" placeholder="Secs">
+            </div>
+
+            <div class="setting-row">
+                <label for="bulk-count">Bulk Export:</label>
+                <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50">
+                <button class="action-btn bulk-btn" id="export-csv-btn">.CSV</button>
+                <button class="action-btn bulk-btn" id="export-txt-btn">.TXT</button>
             </div>
         </div>
 
