@@ -16,6 +16,7 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Username Generation:** Create clean usernames by securely combining random words from the built-in dictionary, complete with custom separators and optional randomized number suffixes.
 * **Passphrase / Diceware Mode:** Generate memorable, mathematically secure passphrases using a built-in dictionary, complete with custom separators, capitalization, and number injection.
     * **Diceware Mode:** Specifically utilizes the full 7,776-word EFF Large Wordlist.
+* **Pattern / Regex Generation:** Create credentials matching exact structural requirements using regex-style patterns (e.g., `[A-Z]{3}-[0-9]{4}-[a-z]{5}`). Perfect for enterprise policies, API keys, or legacy mainframes requiring highly specific formats.
 * **Character Class Guarantees & Custom Symbols:** Enforces enterprise-grade security by **guaranteeing** that at least one character from every selected set (Uppercase, Lowercase, Numbers, Symbols) is included in every generated password. 
     * Includes a **Custom Symbol Pool** input and a **"Safe Symbols" Toggle** to quickly filter out characters commonly rejected by legacy systems (e.g., brackets, quotes).
 * **Advanced Entropy & Crack-Time Meter:** Calculates bit-entropy from charset size and length:
@@ -24,12 +25,13 @@ Unlike many online generators or complex Webpack-compiled tools, this generator 
 * **Cryptographic Memory Wiping & Paranoid Mode:**
     * **Memory Shredding:** When the Auto-Clear timer finishes or Paranoid Mode detects you have switched browser tabs/minimized the window, the app actively shreds the secret by overwriting the memory addresses with cryptographic noise, zeroing them out, and clearing the DOM.
     * **Visual Privacy:** Blurs the password on-screen until hovered.
-    * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains..
+    * **Zero-Persistence:** Disables all `localStorage` saving while active to ensure no trace of your activity remains.
 * **Strict Content Security Policy (CSP):** Full architectural separation of HTML, CSS, and JS allows for a total ban on `'unsafe-inline'` executions and external calls.
 * **Persistent Settings:** When Paranoid Mode is inactive, the app securely remembers your preferred theme, auto-clear timer, and character toggles.
 * **Precision Length Controls:** Features a manual numeric input and full-width slider for exact counts — characters (4–128) in password mode, words in passphrase (3–20) and username (1–10) modes.
 * **Keyboard Shortcuts:** Instantly generate a new password, passphrase, or username at any time simply by pressing the `Spacebar`.
 * **Air-Gapped QR Code Export:** Instantly render generated credentials as a high-contrast QR code directly on your screen. This allows you to securely scan passwords into a mobile device's authenticator or password manager using the camera, completely bypassing the clipboard and local network. For enhanced visual security, the generated `<canvas>` element is completely destroyed and purged from the DOM the moment the modal is closed—rather than just clearing its 2D context—ensuring absolutely zero visual residue remains in memory.
+* **Bulk Generation & Export:** Generate up to 10,000 credentials simultaneously. Export the results instantly as `.CSV` or `.TXT` files directly from client-side memory using Blob URLs, ensuring no bulk data ever touches a backend server.
 
 ---
 
