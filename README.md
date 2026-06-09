@@ -96,7 +96,7 @@ If you want to quickly host the generator on your machine so other local devices
 
 ### 🌐 Advanced Deployment (Caddy with Automatic HTTPS) [Recommended]
 
-> **Pick one Advanced Deployment method.** This Caddy path and the NGINX path above are alternatives — don't run both on the same host. The repo includes a `Caddyfile` with three options (localhost, local network, public domain); you pick one when you configure it.
+> **Pick one Advanced Deployment method.** This Caddy path and the NGINX path below are alternatives — don't run both on the same host. The repo includes a `Caddyfile` with three options (localhost, local network, public domain); you pick one when you configure it.
 
 ### 1. Install Caddy
 Official Debian/Ubuntu repository:
@@ -116,18 +116,21 @@ sudo rm -rf /var/www/html/*
 # Pull the generator
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy the core application files from the root into the web root
-# We use rsync or explicit cp to exclude repository metadata
-sudo rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','nginx.conf'} /tmp/passgen/ /var/www/html/
+# Copy application assets while excluding repository metadata and config files
+sudo rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','Caddyfile','nginx.conf'} /tmp/passgen/ /var/www/html/
 
-# Move the Caddyfile to the correct system directory
+# Copy the Caddyfile to the system directory
 sudo cp /tmp/passgen/Caddyfile /etc/caddy/Caddyfile
 
-# Clean up and securely set permissions
+# Clean up the temporary clone directory
 sudo rm -rf /tmp/passgen
+
+# Securely set ownership and permissions for the Caddy web root
 sudo chown -R caddy:caddy /var/www/html
 sudo find /var/www/html -type d -exec chmod 755 {} \;
 sudo find /var/www/html -type f -exec chmod 644 {} \;
+
+echo "Deployment complete!"
 ```
 
 ### 3. Choose Your Deployment Mode
@@ -172,47 +175,53 @@ sudo ufw --force enable
 ### 🌐 Advanced Deployment (Alternative — NGINX for plain HTTP/Reverse Proxies)
 If you already use a reverse proxy (like NGINX Proxy Manager, Traefik, or Cloudflare Tunnels) that handles HTTPS for you, or if you strictly only need plain HTTP, deploy this on a dedicated, unprivileged Debian/Ubuntu LXC container using NGINX. This method applies the strict CSP headers but leaves TLS management up to your external proxy.
 
-> **Pick one Advanced Deployment method.** This NGINX path and the Caddy path below are alternatives — don't run both on the same host.
+> **Pick one Advanced Deployment method.** This NGINX path and the Caddy path above are alternatives — don't run both on the same host.
 
 ### 1. Prepare the Environment
 Update your system and install NGINX and Git:
 ```bash
-apt update && apt upgrade -y
-apt install nginx git ufw -y
+sudo apt update && sudo apt upgrade -y
+sudo apt install nginx git ufw -y
 ```
 
 ### 2. Deploy the Code
 ```bash
-# Clear old files and pull the generator
-rm -rf /var/www/html/*
+# Ensure the target directory exists and clear existing files
+sudo mkdir -p /var/www/html
+sudo rm -rf /var/www/html/*
+
+# Clone the repository
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy the core application files from the root into the web root
-# We exclude the non-web files to keep the directory clean
-rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','Caddyfile'} /tmp/passgen/ /var/www/html/
+# Copy application assets while excluding repository metadata and config files
+sudo rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','Caddyfile','nginx.conf'} /tmp/passgen/ /var/www/html/
 
-# Clean up temp files
-rm -rf /tmp/passgen
+# Copy the NGINX configuration to the system directory and reload
+sudo cp /tmp/passgen/nginx.conf /etc/nginx/conf.d/vault.conf
+sudo systemctl reload nginx
+
+# Purge temporary files
+sudo rm -rf /tmp/passgen
 
 echo "Deployment complete!"
 ```
 
 ### 3. Lock Down Permissions
-Ensure the web server can only read the files, never modify it:
+Ensure the web server can only read the files, never modify them:
 ```bash
-chown -R www-data:www-data /var/www/html
-find /var/www/html -type d -exec chmod 755 {} \;
-find /var/www/html -type f -exec chmod 644 {} \;
+sudo chown -R www-data:www-data /var/www/html
+sudo find /var/www/html -type d -exec chmod 755 {} \;
+sudo find /var/www/html -type f -exec chmod 644 {} \;
 ```
 
 ### 4. Hardening (Optional but Recommended)
 For maximum security, configure NGINX to drop its version number, add isolation headers, and enforce a strict Content Security Policy tailored for this split-file app:
 ```bash
 # Hide NGINX version number
-sed -i 's/# server_tokens off;/server_tokens off;/g' /etc/nginx/nginx.conf
+sudo sed -i 's/# server_tokens off;/server_tokens off;/g' /etc/nginx/nginx.conf
 
 # Add security headers and strict CSP
-cat << 'EOF' > /etc/nginx/conf.d/security.conf
+cat << 'EOF' | sudo tee /etc/nginx/conf.d/security.conf
 add_header X-Frame-Options "DENY" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "no-referrer" always;
@@ -222,31 +231,30 @@ add_header Cross-Origin-Resource-Policy "same-origin" always;
 add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" always;
 EOF
 
-nginx -t && systemctl restart nginx
+sudo nginx -t && sudo systemctl restart nginx
 ```
 
 ### 5. Lock down the firewall to only accept web traffic:
 ```bash
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow 80/tcp
-ufw enable
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 80/tcp
+sudo ufw --force enable
 ```
 
 ### 6. Enable Auto-Start on Boot:
 ```bash
-systemctl enable nginx
+sudo systemctl enable nginx
 ```
 
 ## 🧪 Testing & Verification
 
+This project ships a zero-dependency test suite that *proves* its core claims rather than asserting them. 
 
-This project ships a zero-dependency test suite that *proves* its core claims
-rather than asserting them. 
+**Automated Validation:** The `.github/workflows` CI/CD pipeline automatically verifies our test suite on every code push. You can view the live status and full history of all test runs [here](https://github.com/jakubgt/homelab-vault-gen/actions). 
+**Status:** ![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)
 
-**Automated Validation:** The `.github/workflows` CI/CD pipeline automatically verifies our test suite on every code push. You can view the live status and full history of all test runs [here](https://github.com/jakubgt/homelab-vault-gen/actions). Status: ![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)
-
-**Manual Validation:** Run with Node (no install needed):
+**Manual Validation:** Run with Node (no installation needed):
 
 ```bash
 node test.js
