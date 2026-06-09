@@ -142,7 +142,7 @@ sudo nano /etc/caddy/Caddyfile
 If you require a different deployment method, ensure exactly one site block is uncommented at a time:
 
 * **Option 1 — `localhost` only** (zero-config, single machine): Caddy automatically trusts its own cert on the local machine. Best for trying the tool out before going further.
-* **Option 2 — local network** (LAN IP or `*.lan` hostname): Replace `HOST IP` in the Caddyfile with your server's IP or local hostname. Clients on *other* devices will see a browser warning until you install Caddy's root CA on them; the cert lives at `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Right choice if you want HTTPS on a private network without a domain.
+* **Option 2 — local network** (LAN IP or `*.lan` hostname): Replace `vault.lan` in the Caddyfile with your server's IP or local hostname. Clients on *other* devices will see a browser warning until you install Caddy's root CA on them; the cert lives at `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Right choice if you want HTTPS on a private network without a domain.
 * **Option 3 — public domain** (auto Let's Encrypt): Replace `vault.example.com` in the Caddyfile with your real domain. Requires DNS A/AAAA records and ports 80/443 reachable from the internet. No browser warnings.
 
 Validate the syntax before starting the service:
