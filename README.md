@@ -115,14 +115,12 @@ sudo rm -rf /var/www/html/*
 # Pull the generator
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy the core application files from the subdirectory into the web root
-sudo cp -r /tmp/passgen/vault-generator/* /var/www/html/
+# Copy the core application files from the root into the web root
+# We use rsync or explicit cp to exclude repository metadata
+sudo rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','nginx.conf'} /tmp/passgen/ /var/www/html/
 
 # Move the Caddyfile to the correct system directory
-sudo cp /tmp/passgen/vault-generator/Caddyfile /etc/caddy/Caddyfile
-
-# Remove non-web config files from the public web root
-sudo rm -f /var/www/html/Caddyfile /var/www/html/nginx.conf /var/www/html/docker-compose.yml /var/www/html/tests.yml /var/www/html/test.js
+sudo cp /tmp/passgen/Caddyfile /etc/caddy/Caddyfile
 
 # Clean up and securely set permissions
 sudo rm -rf /tmp/passgen
@@ -186,8 +184,9 @@ apt install nginx git ufw -y
 rm -rf /var/www/html/*
 git clone https://github.com/jakubgt/homelab-vault-gen.git /tmp/passgen
 
-# Copy the core application files from the subdirectory into the web root
-cp -r /tmp/passgen/vault-generator/* /var/www/html/
+# Copy the core application files from the root into the web root
+# We exclude the non-web files to keep the directory clean
+rsync -av --exclude={'.git','.github','README.md','LICENSE','tests.yml','test.js','docker-compose.yml','Caddyfile'} /tmp/passgen/ /var/www/html/
 
 # Clean up temp files
 rm -rf /tmp/passgen
