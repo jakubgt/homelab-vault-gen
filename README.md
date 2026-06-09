@@ -228,7 +228,7 @@ add_header Referrer-Policy "no-referrer" always;
 add_header Permissions-Policy "clipboard-read=(), clipboard-write=(self)" always;
 add_header Cross-Origin-Opener-Policy "same-origin" always;
 add_header Cross-Origin-Resource-Policy "same-origin" always;
-add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" always;
+add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'data:' 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" always;
 EOF
 
 sudo nginx -t && sudo systemctl restart nginx
