@@ -236,6 +236,19 @@ body.dark-mode #insecure-warning {
 }
 .clear-select { margin-left: 10px; padding: 2px; }
 
+/* Bulk Buttons */
+.bulk-btn {
+    width: auto;
+    margin-top: 0;
+    margin-left: 10px;
+    padding: 4px 12px;
+    font-size: 13px;
+    background-color: #6c757d;
+}
+.bulk-btn:hover {
+    background-color: #5a6268;
+}
+
 /* --- QR Modal & Action Group --- */
 .action-group {
     display: flex;
@@ -264,7 +277,8 @@ body.dark-mode #insecure-warning {
     text-align: center;
     border: 1px solid var(--border-color);
 }
-#qr-canvas {
-    border: 10px solid white; /* Contrast buffer ensures readability for scanners */
+#qr-container {
+    padding: 10px;
     border-radius: 4px;
+    background: white;
 }
