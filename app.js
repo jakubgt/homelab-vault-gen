@@ -51,7 +51,7 @@ let clearTimer;
 let lengths = { pwd: 24, pass: 6, user: 2 }; 
 let activeSecretBuffer = null;
 
-// --- WORKING-BUFFER WIPING (best-effort) ---
+// --- WORKING-BUFFER WIPING  ---
 function wipeMemory() {
     if (activeSecretBuffer) {
         crypto.getRandomValues(activeSecretBuffer); 
