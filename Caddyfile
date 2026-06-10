@@ -3,7 +3,7 @@
 # ===========================================================================
 # Caddy auto-provisions and renews TLS certificates. This is the cleanest
 # way to satisfy the Web Crypto "secure context" requirement for non-
-# localhost access (Web Crypto refuses to run on plain HTTP).
+# localhost access.
 # ===========================================================================
 
 # Reusable security headers (mirrors the NGINX hardening profile).
