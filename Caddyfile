@@ -1,9 +1,9 @@
 # ===========================================================================
 # Homelab Vault — Caddyfile
 # ===========================================================================
-# Caddy auto-provisions and renews TLS certificates. This provides trusted
-# delivery and enables secure-context APIs such as the modern clipboard API
-# for non-localhost access.
+# Caddy auto-provisions and renews TLS certificates. Clients must trust the
+# issuing CA before this provides authenticated delivery and enables
+# secure-context APIs such as the modern clipboard API over the LAN.
 # ===========================================================================
 
 # Reusable security headers (mirrors the NGINX hardening profile).
@@ -23,30 +23,30 @@
 }
 
 # ---------------------------------------------------------------------------
-# OPTION 1 (Default) — Zero-config localhost (same machine only).
+# OPTION 1 — Zero-config localhost (same machine only).
 # ---------------------------------------------------------------------------
-localhost {
-    root * /srv/homelab-vault
-    file_server
-    encode zstd gzip
-    import security_headers
-}
-
-# ---------------------------------------------------------------------------
-# OPTION 2 — Local network access via a hostname.
-# Clients on OTHER devices will see a cert warning the first time, because
-# Caddy's internal CA is not trusted by default. Install Caddy's root cert
-# on each client to silence the warning:
-#   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
-# The hostname must also resolve through local DNS or a hosts-file entry.
-# ---------------------------------------------------------------------------
-# https://vault.lan {
-#     tls internal
+# localhost {
 #     root * /srv/homelab-vault
 #     file_server
 #     encode zstd gzip
 #     import security_headers
 # }
+
+# ---------------------------------------------------------------------------
+# OPTION 2 (Default) — Local network access via a hostname.
+# Clients on other devices will not trust this certificate until Caddy's
+# local root CA is installed in their trust store. Distribute only root.crt;
+# never distribute the CA private key (root.key).
+#   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+# The hostname must also resolve through local DNS or a hosts-file entry.
+# ---------------------------------------------------------------------------
+https://vault.lan {
+    tls internal
+    root * /srv/homelab-vault
+    file_server
+    encode zstd gzip
+    import security_headers
+}
 
 # ---------------------------------------------------------------------------
 # OPTION 3 — Public domain with automatic Let's Encrypt certificate.
