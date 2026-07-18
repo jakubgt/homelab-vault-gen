@@ -76,7 +76,21 @@ docker compose down
 
 ## HTTPS with Caddy
 
-The included `Caddyfile` defaults to same-machine `https://localhost`. It serves files from `/srv/homelab-vault` and sends the same CSP and privacy headers as the Docker NGINX configuration.
+The included `Caddyfile` defaults to LAN access at `https://vault.lan` using Caddy's internal CA. It serves the app directly from `/srv/homelab-vault` and sends the same CSP and privacy headers as the Docker NGINX configuration. This is a separate deployment method: `docker-compose.yml` still runs NGINX and does not use the `Caddyfile`.
+
+The commands below assume Caddy's official Linux package and `caddy` systemd service. See [Caddy's install guide](https://caddyserver.com/docs/install) first if Caddy is not installed.
+
+### 1. Configure the LAN hostname
+
+Give the Caddy host a stable LAN address, preferably with a DHCP reservation. Add an A/AAAA record for `vault.lan` to your local DNS, or add the following entry to every client's hosts file, replacing the example address with the server's LAN address:
+
+```text
+192.168.1.50 vault.lan
+```
+
+Hosts files are normally `/etc/hosts` on Linux and macOS and `%SystemRoot%\System32\drivers\etc\hosts` on Windows. Phones and tablets generally need local DNS instead. Open the site by its exact hostname, not by IP address. `vault.lan` is a conventional private name; `vault.home.arpa` is the standards-based alternative for a new home DNS zone.
+
+### 2. Install the app and start Caddy
 
 From a checked-out repository, install only the runtime files into a web root that the Caddy account cannot modify:
 
@@ -88,16 +102,41 @@ sudo install -o root -g caddy -m 0640 \
 sudo install -d -o root -g caddy -m 0750 /srv/homelab-vault/assets
 sudo install -o root -g caddy -m 0640 assets/*.png /srv/homelab-vault/assets/
 sudo install -o root -g root -m 0644 Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
+sudo -u caddy -H caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy
 sudo systemctl reload caddy
+sudo systemctl --no-pager --full status caddy
 ```
 
-The file includes two commented alternatives:
+For later changes, validate first and use `sudo systemctl reload caddy` rather than stopping the service. If startup or reload fails, inspect `sudo journalctl -u caddy -n 50 --no-pager`.
 
-- `https://vault.lan` with Caddy's internal CA. Configure local DNS or a hosts-file entry and trust Caddy's root CA on every client.
-- `vault.example.com` with a public certificate. Configure DNS and make ports 80/443 reachable as required by your ACME challenge.
+### 3. Trust Caddy's local CA
 
-Enable exactly one site block. Validate the configuration before every reload. Keep an existing SSH or other management path allowed before changing host firewall rules.
+After the first successful start, securely copy **only** this certificate from the Caddy host to every client:
+
+```text
+/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+```
+
+That path is the default for Caddy's official systemd service. Import `root.crt` as a trusted root CA in each operating system or browser that will open the site; some browsers use their own trust store. On the Caddy host itself, `sudo caddy trust` installs the CA into the host trust store. See [Caddy's local HTTPS instructions](https://caddyserver.com/docs/running#local-https-with-systemd) for details.
+
+Verify the certificate's SHA-256 fingerprint on the server and client over a separate trusted channel before importing it:
+
+```bash
+openssl x509 -in root.crt -noout -sha256 -fingerprint
+```
+
+Never copy or expose `root.key`: possession of the CA private key would allow someone to impersonate trusted sites to clients that installed this CA. Do not bypass browser certificate warnings; fix name resolution and CA trust instead.
+
+Once DNS and trust are configured, verify the site:
+
+```bash
+curl --cacert root.crt -I https://vault.lan
+```
+
+Allow inbound TCP 443 only from trusted LAN networks. TCP 80 is optional for Caddy's HTTP-to-HTTPS redirect, and UDP 443 is optional for HTTP/3. No public DNS record or WAN port forwarding is required for this LAN-only setup.
+
+The `Caddyfile` also contains commented alternatives for same-machine `https://localhost` and a public domain. Enable exactly one site block and validate before every reload.
 
 `nginx.conf` is designed for the unprivileged Docker image and its `/usr/share/nginx/html` root; it is not a drop-in host NGINX site configuration.
 

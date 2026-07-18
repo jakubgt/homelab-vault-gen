@@ -182,6 +182,10 @@ const app = read('app.js');
 const nginx = read('nginx.conf');
 const caddy = read('Caddyfile');
 const compose = read('docker-compose.yml');
+const activeCaddy = caddy
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
 
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
 check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
@@ -191,6 +195,8 @@ check('Paranoid Mode never clears unrelated origin storage', !app.includes('loca
 check('QR cleanup removes the library title copy', app.includes("removeAttribute('title')"));
 check('served CSP does not allow unsafe inline code', !nginx.includes("'unsafe-inline'") && !caddy.includes("'unsafe-inline'"));
 check('served CSP permits local QR data images', [nginx, caddy].every((config) => config.includes("img-src 'self' data:")));
+check('Caddy defaults to vault.lan with its internal CA', /^https:\/\/vault\.lan\s*\{/m.test(activeCaddy) && /^\s*tls internal\s*$/m.test(activeCaddy));
+check('Caddy leaves the localhost alternative disabled', !/^localhost\s*\{/m.test(activeCaddy));
 
 console.log(`\n${'-'.repeat(58)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);
