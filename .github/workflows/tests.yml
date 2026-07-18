@@ -2,19 +2,33 @@ name: tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
-      # No dependencies to install — test.js is pure Node.
+      - name: Check JavaScript syntax
+        run: node --check core.js && node --check app.js && node --check test.js
+
       - name: Run test suite
         run: node test.js
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet

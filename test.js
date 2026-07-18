@@ -1,287 +1,197 @@
 /*
- * Homelab Vault — Test Suite
- * --------------------------------------------------------------------------
- * Zero-dependency tests. Run with:   node test.js
- *
- * These tests exist to PROVE the security claims rather than assert them:
- * 1. getSecureRandomInt produces a statistically uniform distribution
- * (this is the actual evidence that rejection sampling kills modulo bias).
- * 2. The Strict character-class enforcement holds across thousands of passwords.
- * 3. The wordlist matches the EFF Large Wordlist shape (7,776 unique words),
- * because the displayed passphrase entropy depends on that count.
- * 4. The displayed entropy formula matches hand-computed values.
- *
- * The browser app (app.js) is not imported directly because it touches the
- * DOM, localStorage, and window on load. Instead we re-implement the small
- * pure functions under test here and keep them byte-for-byte identical to
- * app.js. If you change the algorithm in app.js, mirror it here.
- * --------------------------------------------------------------------------
+ * Homelab Vault — zero-dependency production-core tests
+ * Run with: node test.js
  */
 
 'use strict';
+
+const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
+const {
+    CHARS,
+    DEFAULT_SYMS,
+    CONFIG_FRIENDLY_SYMS,
+    calculatePasswordEntropy,
+    generatePasswordBytes,
+    getSecureRandomInt,
+    normalizeSymbolPool,
+    parsePattern
+} = require('./core.js');
 
-// --- Test harness (tiny, no framework) ------------------------------------
-let passed = 0, failed = 0;
-function check(name, condition, detail) {
-    if (condition) { passed++; console.log(`  PASS  ${name}`); }
-    else { failed++; console.log(`  FAIL  ${name}${detail ? '  ->  ' + detail : ''}`); }
-}
-function section(title) { console.log(`\n=== ${title} ===`); }
+let passed = 0;
+let failed = 0;
 
-// --- Function under test: copied verbatim from app.js ---------------------
-function getSecureRandomInt(max) {
-    const randomBytes = new Uint32Array(1);
-    const maxValid = Math.floor(4294967296 / max) * max;
-    while (true) {
-        crypto.getRandomValues(randomBytes);
-        if (randomBytes[0] < maxValid) return randomBytes[0] % max;
+function check(name, condition, detail = '') {
+    if (condition) {
+        passed++;
+        console.log(`  PASS  ${name}`);
+    } else {
+        failed++;
+        console.log(`  FAIL  ${name}${detail ? `  ->  ${detail}` : ''}`);
     }
 }
 
-// --- Load the real wordlist from words.js ---------------------------------
+function section(title) {
+    console.log(`\n=== ${title} ===`);
+}
+
+function expectThrow(name, callback, ErrorType = Error) {
+    let error = null;
+    try {
+        callback();
+    } catch (caught) {
+        error = caught;
+    }
+    check(name, error instanceof ErrorType, error ? error.constructor.name : 'did not throw');
+}
+
+function read(relativePath) {
+    return fs.readFileSync(path.join(__dirname, relativePath), 'utf8');
+}
+
 function loadWords() {
-    const src = fs.readFileSync(__dirname + '/words.js', 'utf8');
-    const m = src.match(/\[[\s\S]*\]/);
-    if (!m) throw new Error('Could not find WORDS array in words.js');
-    return JSON.parse(m[0].replace(/'/g, '"'));
+    const source = read('words.js');
+    const arrayMatch = source.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) throw new Error('Could not find the WORDS array in words.js');
+    return JSON.parse(arrayMatch[0].replace(/'/g, '"'));
 }
 
-// ==========================================================================
-section('1. RNG uniformity (proves no modulo bias)');
+section('1. Secure random integer');
 
-// Chi-squared goodness-of-fit. We bucket many draws over a small modulus and
-// confirm the counts don't deviate from uniform more than chance allows.
-function chiSquaredUniform(max, draws) {
-    const counts = new Array(max).fill(0);
-    for (let i = 0; i < draws; i++) counts[getSecureRandomInt(max)]++;
-    const expected = draws / max;
-    let chi2 = 0;
-    for (const c of counts) chi2 += ((c - expected) ** 2) / expected;
-    return { chi2, counts };
-}
-
-// max=10, 2,000,000 draws. df=9. Chi-squared critical value at p=0.001 / df=9
-// is ~27.88. A correct uniform RNG will almost never exceed this; a biased one
-// (e.g. naive % without rejection) reliably will. We use a very loose p=0.001
-// threshold so the test is not flaky on legitimate randomness.
 {
-    const { chi2, counts } = chiSquaredUniform(10, 2_000_000);
-    check('chi-squared within bounds for max=10',
-        chi2 < 27.88,
-        `chi2=${chi2.toFixed(2)} (crit 27.88); counts=[${counts.join(',')}]`);
-}
-
-// Range safety: never returns >= max, never negative, across many maxima.
-{
-    let outOfRange = false;
-    for (const max of [2, 7, 26, 62, 95, 7776]) {
-        for (let i = 0; i < 50_000; i++) {
-            const v = getSecureRandomInt(max);
-            if (v < 0 || v >= max || !Number.isInteger(v)) { outOfRange = true; break; }
+    const values = [0xffffffff, 27];
+    let calls = 0;
+    const fakeCrypto = {
+        getRandomValues(target) {
+            target[0] = values[calls++];
+            return target;
         }
-    }
-    check('output always in [0, max) and integer', !outOfRange);
+    };
+    const result = getSecureRandomInt(10, fakeCrypto);
+    check('rejects values above the unbiased boundary before using modulo', result === 7 && calls === 2, `result=${result}, calls=${calls}`);
 }
 
-// A non-power-of-two modulus is the case where naive modulo bias shows up.
-// Confirm small-modulus uniformity holds for an awkward value like 95
-// (the size of a full printable-ASCII pool).
 {
-    const { chi2 } = chiSquaredUniform(95, 2_000_000);
-    // df=94; p=0.001 critical ~ 144.5
-    check('chi-squared within bounds for max=95 (awkward modulus)',
-        chi2 < 144.5,
-        `chi2=${chi2.toFixed(2)} (crit ~144.5)`);
-}
-
-// ==========================================================================
-section('2. Character-class guarantee (Uint8Array Implementation)');
-
-// Mirror of generatePassword's pool-build + guarantee logic (DOM stripped).
-function generatePasswordPure(len, rawSets) {
-    let pool = rawSets.join('');
-    if (!pool) return '';
-    if (len < rawSets.length) return null; // mirrors the "length must be >= sets" guard
-    
-    let isValid = false;
-    let iterations = 0;
-    const maxIterations = 1000;
-    
-    let activeSetsCodes = rawSets.map(set => {
-        let arr = new Uint8Array(set.length);
-        for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
-        return arr;
-    });
-
-    let pwdBuffer = new Uint8Array(len);
-
-    while (!isValid && iterations < maxIterations) {
-        for (let i = 0; i < len; i++) {
-            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
-        }
-        
-        isValid = activeSetsCodes.every(set => {
-            for (let i = 0; i < len; i++) {
-                if (set.includes(pwdBuffer[i])) return true;
+    let inRange = true;
+    for (const max of [1, 2, 7, 26, 62, 95, 7776]) {
+        for (let draw = 0; draw < 20_000; draw++) {
+            const result = getSecureRandomInt(max);
+            if (!Number.isInteger(result) || result < 0 || result >= max) {
+                inRange = false;
+                break;
             }
-            return false;
-        });
-        iterations++;
-    }
-
-    if (iterations >= maxIterations) {
-        for (let i = 0; i < len; i++) {
-            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
         }
     }
-    
-    return new TextDecoder().decode(pwdBuffer);
+    check('always returns an integer in [0, max)', inRange);
 }
 
-const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const LOWER = "abcdefghijklmnopqrstuvwxyz";
-const NUMS  = "0123456789";
-const SYMS  = "!@#$%^&*()-_=+";
+expectThrow('rejects max=0 instead of looping forever', () => getSecureRandomInt(0), RangeError);
+expectThrow('rejects a max above the Uint32 source range', () => getSecureRandomInt(0x100000001), RangeError);
+expectThrow('requires a cryptographic random source', () => getSecureRandomInt(10, {}), Error);
+
+section('2. Symbol pools and password guarantees');
+
+check(
+    'deduplicates symbols and removes letters, digits, whitespace, and Unicode',
+    normalizeSymbolPool('!!!@@A1 é🙂') === '!@'
+);
+check('default symbol pool is unique', new Set(DEFAULT_SYMS).size === DEFAULT_SYMS.length);
+check('config-friendly pool is the documented ._-+= set', CONFIG_FRIENDLY_SYMS === '._-+=');
 
 {
-    const sets = [UPPER, LOWER, NUMS, SYMS];
-    let allValid = true, failExample = '';
-    for (let i = 0; i < 20_000; i++) {
-        const pwd = generatePasswordPure(16, sets);
-        const ok = sets.every(set => pwd.split('').some(ch => set.includes(ch)));
-        if (!ok) { allValid = false; failExample = pwd; break; }
-    }
-    check('every password contains all 4 selected classes (len=16, 20k samples)',
-        allValid, failExample);
-}
-
-{
-    // Tight case: length exactly equals number of classes.
-    const sets = [UPPER, LOWER, NUMS, SYMS];
+    const sets = [CHARS.upper, CHARS.lower, CHARS.nums, DEFAULT_SYMS];
     let allValid = true;
-    for (let i = 0; i < 20_000; i++) {
-        const pwd = generatePasswordPure(4, sets);
-        const ok = sets.every(set => pwd.split('').some(ch => set.includes(ch)));
-        if (!ok) { allValid = false; break; }
+    for (let sample = 0; sample < 10_000; sample++) {
+        const password = new TextDecoder().decode(generatePasswordBytes(16, sets));
+        if (!sets.every((set) => Array.from(password).some((char) => set.includes(char)))) {
+            allValid = false;
+            break;
+        }
     }
-    check('class guarantee holds at len === number of classes (4)', allValid);
+    check('every generated password contains all selected classes', allValid);
 }
 
 {
-    check('returns null when length < number of classes',
-        generatePasswordPure(3, [UPPER, LOWER, NUMS, SYMS]) === null);
-}
-
-// Ambiguous-stripping edge cases. Mirror app.js logic.
-function stripAmbig(s) { return s.replace(/[lI1O0]/g, ''); }
-function generateWithAmbigStrip(len, rawSets) {
-    let sets = rawSets.map(stripAmbig).filter(s => s.length > 0);
-    let pool = sets.join('');
-    if (!pool) return '';
-    if (len < sets.length) return null;
-
-    let activeSetsCodes = sets.map(set => {
-        let arr = new Uint8Array(set.length);
-        for(let i=0; i<set.length; i++) arr[i] = set.charCodeAt(i);
-        return arr;
-    });
-
-    let pwdBuffer = new Uint8Array(len);
-    let isValid = false, iterations = 0;
-    const maxIterations = 1000;
-    
-    while (!isValid && iterations < maxIterations) {
-        for (let i = 0; i < len; i++) {
-            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
-        }
-        isValid = activeSetsCodes.every(set => {
-            for (let i = 0; i < len; i++) {
-                if (set.includes(pwdBuffer[i])) return true;
-            }
-            return false;
-        });
-        iterations++;
-    }
-    
-    if (iterations >= maxIterations) {
-        for (let i = 0; i < len; i++) {
-            pwdBuffer[i] = pool.charCodeAt(getSecureRandomInt(pool.length));
-        }
-    }
-    
-    return new TextDecoder().decode(pwdBuffer);
-}
-
-{
-    // Numbers-only with ambiguous off vs on: pool 10 -> 8 (loses 1 and 0).
+    const sets = [CHARS.upper, CHARS.lower, CHARS.nums, '!'];
     let allValid = true;
-    for (let i = 0; i < 20_000; i++) {
-        const pwd = generateWithAmbigStrip(8, [NUMS]);
-        if (!/^[2-9]+$/.test(pwd)) { allValid = false; break; }
+    for (let sample = 0; sample < 2_000; sample++) {
+        const password = new TextDecoder().decode(generatePasswordBytes(4, sets));
+        if (!sets.every((set) => Array.from(password).some((char) => set.includes(char)))) {
+            allValid = false;
+            break;
+        }
     }
-    check('numbers-only + ambiguous strip yields only 2-9, guarantee holds',
-        allValid);
+    check('class guarantee holds for the tight, one-symbol edge case', allValid);
+}
+
+check('returns null when length is below selected class count', generatePasswordBytes(3, [CHARS.upper, CHARS.lower, CHARS.nums, '!']) === null);
+expectThrow('rejects overlapping character sets', () => generatePasswordBytes(12, ['ab', 'bc']), RangeError);
+expectThrow('rejects non-ASCII character sets', () => generatePasswordBytes(12, ['abc', 'é']), RangeError);
+
+section('3. Exact entropy accounting');
+
+{
+    const entropy = calculatePasswordEntropy(2, ['ab', '1']);
+    check('counts the exact class-constrained output space', Math.abs(entropy - 2) < 1e-12, `got ${entropy}`);
 }
 
 {
-    // A custom symbol pool consisting ENTIRELY of ambiguous chars must not
-    // crash or hang — the set drops out and generation proceeds on what's left.
-    const result = generateWithAmbigStrip(12, [LOWER, "lI1O0"]);
-    const ok = result.length === 12 && stripAmbig(LOWER).split('').some(c => result.includes(c));
-    check('all-ambiguous custom set drops cleanly, no hang', ok);
+    const entropy = calculatePasswordEntropy(4, [CHARS.upper, CHARS.lower, CHARS.nums, DEFAULT_SYMS]);
+    check('default four-character constrained entropy is about 22.12 bits', Math.abs(entropy - 22.1151) < 0.001, `got ${entropy.toFixed(4)}`);
 }
 
 {
-    // If EVERY selected set is all-ambiguous, pool is empty -> returns ''.
-    check('pool that strips to empty returns empty string (no infinite loop)',
-        generateWithAmbigStrip(12, ["1O0", "lI"]) === '');
+    const entropy = calculatePasswordEntropy(24, [CHARS.upper, CHARS.lower, CHARS.nums, DEFAULT_SYMS]);
+    check('24-character default entropy is finite and above 150 bits', Number.isFinite(entropy) && entropy > 150, `got ${entropy.toFixed(2)}`);
 }
 
-// ==========================================================================
-section('3. Wordlist integrity (backs passphrase entropy claim)');
+section('4. Pattern parser');
 
-const WORDS = loadWords();
-check('wordlist has exactly 7,776 words (EFF Large)', WORDS.length === 7776,
-    `got ${WORDS.length}`);
-check('all words unique', new Set(WORDS).size === WORDS.length,
-    `${WORDS.length - new Set(WORDS).size} duplicates`);
-check('no empty words', !WORDS.some(w => w.length === 0));
-check('all entries are strings', WORDS.every(w => typeof w === 'string'));
-
-// ==========================================================================
-section('4. Entropy math sanity');
-
-// Password entropy: H = L * log2(N). Verify a couple of known values.
-function pwdEntropy(len, poolSize) { return len * Math.log2(poolSize); }
 {
-    // 16 chars from a 26+26+10+13 = 75-char pool
-    const h = pwdEntropy(16, 75);
-    check('16 chars, 75-pool ≈ 99.6 bits', Math.abs(h - 99.66) < 0.1,
-        `got ${h.toFixed(2)}`);
-}
-{
-    // Passphrase: 6 words from 7,776 = 6 * log2(7776) ≈ 77.5 bits
-    const h = 6 * Math.log2(7776);
-    check('6-word diceware ≈ 77.5 bits', Math.abs(h - 77.55) < 0.1,
-        `got ${h.toFixed(2)}`);
-}
-{
-    // Conservative number-injection: numCount digits add ONLY value entropy
-    // (numCount * log2(10)), no positional term. 2 digits ≈ 6.64 bits.
-    const h = 2 * Math.log2(10);
-    check('2 sprinkled digits add ≈ 6.64 bits (value only, conservative)',
-        Math.abs(h - 6.644) < 0.01, `got ${h.toFixed(3)}`);
-}
-{
-    // Random-symbol separator: (count-1) gaps, each one of 11 symbols.
-    // For a 6-word phrase: 5 * log2(11) ≈ 17.3 bits added.
-    const h = 5 * Math.log2(11);
-    check('random separators on 6-word phrase add ≈ 17.3 bits',
-        Math.abs(h - 17.30) < 0.05, `got ${h.toFixed(2)}`);
+    const analysis = parsePattern('[A-Z]{3}-[0-9]{4}-[a-z]{5}');
+    const expectedEntropy = 8 * Math.log2(26) + 4 * Math.log2(10);
+    check('parses the documented pattern length', !analysis.error && analysis.totalLength === 14, analysis.error || `length=${analysis.totalLength}`);
+    check('calculates pattern entropy from randomized tokens only', Math.abs(analysis.entropy - expectedEntropy) < 1e-10, `got ${analysis.entropy}`);
 }
 
-// ==========================================================================
-console.log(`\n${'-'.repeat(50)}`);
+check('supports escaped literal brackets and braces', parsePattern('\\[A-Z\\]\\{2\\}').error === null);
+check('rejects a missing closing bracket', Boolean(parsePattern('[A-Z').error));
+check('rejects descending ranges', Boolean(parsePattern('[Z-A]').error));
+check('rejects zero repetition', Boolean(parsePattern('[A-Z]{0}').error));
+check('rejects non-ASCII patterns instead of corrupting them', Boolean(parsePattern('[é]').error));
+check('caps generated pattern output at 1,000 characters', Boolean(parsePattern('[A-Z]{1001}').error));
+
+section('5. Wordlist integrity');
+
+const words = loadWords();
+const wordlistDigest = crypto.createHash('sha256').update(words.join('\n')).digest('hex');
+check('wordlist has exactly 7,776 entries', words.length === 7776, `got ${words.length}`);
+check('all wordlist entries are unique', new Set(words).size === words.length);
+check('all wordlist entries use the expected lowercase/hyphen format', words.every((word) => /^[a-z]+(?:-[a-z]+)*$/.test(word)));
+check(
+    'word sequence matches the audited project fixture',
+    wordlistDigest === 'abae49761b88f3f1ba31ef944bea1f61b795a3cd7e1cfb7d276ed45bf77967ba',
+    wordlistDigest
+);
+
+section('6. Repository integration');
+
+const html = read('index.html');
+const app = read('app.js');
+const nginx = read('nginx.conf');
+const caddy = read('Caddyfile');
+const compose = read('docker-compose.yml');
+
+check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
+check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
+check('shared production core loads before app.js', html.indexOf('core.js') > -1 && html.indexOf('core.js') < html.indexOf('app.js'));
+check('Docker serves the shared production core', compose.includes('./core.js:'));
+check('Paranoid Mode never clears unrelated origin storage', !app.includes('localStorage.clear'));
+check('QR cleanup removes the library title copy', app.includes("removeAttribute('title')"));
+check('served CSP does not allow unsafe inline code', !nginx.includes("'unsafe-inline'") && !caddy.includes("'unsafe-inline'"));
+check('served CSP permits local QR data images', [nginx, caddy].every((config) => config.includes("img-src 'self' data:")));
+
+console.log(`\n${'-'.repeat(58)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
