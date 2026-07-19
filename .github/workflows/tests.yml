@@ -27,6 +27,11 @@ jobs:
       - name: Check JavaScript syntax
         run: node --check core.js && node --check app.js && node --check test.js
 
+      - name: Check Debian LXC installer
+        run: |
+          test -x install-caddy-lxc.sh
+          dash -n install-caddy-lxc.sh
+
       - name: Run test suite
         run: node test.js
 

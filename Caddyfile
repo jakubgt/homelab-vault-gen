@@ -33,7 +33,9 @@
 # ---------------------------------------------------------------------------
 # localhost {
 #     root * /srv/homelab-vault
-#     file_server
+#     file_server {
+#         hide .homelab-vault-managed
+#     }
 #     encode zstd gzip
 #     import security_headers
 # }
@@ -50,11 +52,13 @@
 # ---------------------------------------------------------------------------
 https://<LXC_IPV4> {
 	# This deliberate non-directive makes an unconfigured template fail.
-	# The README deployment command removes it after verifying the LXC IP.
+	# The installer removes it after verifying the LXC IP.
 	ip_address_must_be_configured
 	tls internal
 	root * /srv/homelab-vault
-	file_server
+	file_server {
+		hide .homelab-vault-managed
+	}
 	encode zstd gzip
 	import security_headers
 }
@@ -64,7 +68,9 @@ https://<LXC_IPV4> {
 # ---------------------------------------------------------------------------
 # vault.example.com {
 #     root * /srv/homelab-vault
-#     file_server
+#     file_server {
+#         hide .homelab-vault-managed
+#     }
 #     encode zstd gzip
 #     import security_headers
 #     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
