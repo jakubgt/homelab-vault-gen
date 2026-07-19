@@ -182,10 +182,14 @@ const app = read('app.js');
 const nginx = read('nginx.conf');
 const caddy = read('Caddyfile');
 const compose = read('docker-compose.yml');
+const readme = read('README.md');
 const activeCaddy = caddy
     .split(/\r?\n/)
     .filter((line) => !/^\s*#/.test(line))
     .join('\n');
+const renderedCaddy = activeCaddy
+    .replace('<LXC_IPV4>', '192.0.2.1')
+    .replace(/^\s*ip_address_must_be_configured\s*$/m, '');
 
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
 check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
@@ -195,8 +199,30 @@ check('Paranoid Mode never clears unrelated origin storage', !app.includes('loca
 check('QR cleanup removes the library title copy', app.includes("removeAttribute('title')"));
 check('served CSP does not allow unsafe inline code', !nginx.includes("'unsafe-inline'") && !caddy.includes("'unsafe-inline'"));
 check('served CSP permits local QR data images', [nginx, caddy].every((config) => config.includes("img-src 'self' data:")));
-check('Caddy defaults to vault.lan with its internal CA', /^https:\/\/vault\.lan\s*\{/m.test(activeCaddy) && /^\s*tls internal\s*$/m.test(activeCaddy));
-check('Caddy leaves the localhost alternative disabled', !/^localhost\s*\{/m.test(activeCaddy));
+check(
+    'Caddy requires the LXC IPv4 and uses its internal CA',
+    /^https:\/\/<LXC_IPV4>\s*\{/m.test(activeCaddy) &&
+        (activeCaddy.match(/<LXC_IPV4>/g) || []).length === 1 &&
+        /^\s*ip_address_must_be_configured\s*$/m.test(activeCaddy) &&
+        /^\s*tls internal\s*$/m.test(activeCaddy)
+);
+check(
+    'Caddy IP template renders one exact active address',
+    !renderedCaddy.includes('<LXC_IPV4>') &&
+        !renderedCaddy.includes('ip_address_must_be_configured') &&
+        (renderedCaddy.match(/^https:\/\/192\.0\.2\.1\s*\{/gm) || []).length === 1
+);
+check('Caddy skips automatic host trust-store changes', /^\s*skip_install_trust\s*$/m.test(activeCaddy));
+check(
+    'Caddy leaves localhost and vault.lan alternatives disabled',
+    !/^localhost\s*\{/m.test(activeCaddy) && !/^https:\/\/vault\.lan\s*\{/m.test(activeCaddy)
+);
+check(
+    'README prompts for and verifies the LXC IPv4 before Caddy starts',
+    readme.includes("Enter this LXC's reserved IPv4 address") &&
+        readme.includes('ip -4 -o address show scope global') &&
+        readme.includes('s|^https://<LXC_IPV4> {|https://${VAULT_IP} {|')
+);
 
 console.log(`\n${'-'.repeat(58)}`);
 console.log(`Results: ${passed} passed, ${failed} failed`);

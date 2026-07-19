@@ -6,24 +6,30 @@
 # secure-context APIs such as the modern clipboard API over the LAN.
 # ===========================================================================
 
+# Client trust is installed manually for this LAN deployment. Do not let the
+# unprivileged systemd service attempt to modify host or browser trust stores.
+{
+	skip_install_trust
+}
+
 # Reusable security headers (mirrors the NGINX hardening profile).
 (security_headers) {
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=(), clipboard-read=(), clipboard-write=(self)"
-        Cross-Origin-Opener-Policy "same-origin"
-        Cross-Origin-Resource-Policy "same-origin"
-        X-Permitted-Cross-Domain-Policies "none"
-        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none';"
-        Cache-Control "no-store, no-cache, must-revalidate, private"
-        -Server
-    }
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=(), clipboard-read=(), clipboard-write=(self)"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		X-Permitted-Cross-Domain-Policies "none"
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none';"
+		Cache-Control "no-store, no-cache, must-revalidate, private"
+		-Server
+	}
 }
 
 # ---------------------------------------------------------------------------
-# OPTION 1 — Zero-config localhost (same machine only).
+# OPTION 1 — Same-machine localhost (manual CA trust is still required).
 # ---------------------------------------------------------------------------
 # localhost {
 #     root * /srv/homelab-vault
@@ -33,19 +39,24 @@
 # }
 
 # ---------------------------------------------------------------------------
-# OPTION 2 (Default) — Local network access via a hostname.
-# Clients on other devices will not trust this certificate until Caddy's
-# local root CA is installed in their trust store. Distribute only root.crt;
-# never distribute the CA private key (root.key).
+# OPTION 2 (Default) — LAN access at the Debian LXC's reserved IPv4 address.
+# REQUIRED SETUP: replace <LXC_IPV4> with the bare IPv4 address assigned to
+# this LXC (for example, 192.168.1.50; do not include a /24 suffix). The
+# placeholder is intentionally invalid so Caddy cannot start before setup.
+# Clients use that exact IP, so no LAN DNS or hosts-file entry is needed.
+# They must trust Caddy's local root CA. Distribute only root.crt; never
+# distribute the CA private key (root.key):
 #   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
-# The hostname must also resolve through local DNS or a hosts-file entry.
 # ---------------------------------------------------------------------------
-https://vault.lan {
-    tls internal
-    root * /srv/homelab-vault
-    file_server
-    encode zstd gzip
-    import security_headers
+https://<LXC_IPV4> {
+	# This deliberate non-directive makes an unconfigured template fail.
+	# The README deployment command removes it after verifying the LXC IP.
+	ip_address_must_be_configured
+	tls internal
+	root * /srv/homelab-vault
+	file_server
+	encode zstd gzip
+	import security_headers
 }
 
 # ---------------------------------------------------------------------------
