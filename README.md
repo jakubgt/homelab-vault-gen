@@ -100,7 +100,7 @@ chmod 0700 /root/install-homelab-vault.sh
 /root/install-homelab-vault.sh
 ```
 
-The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
+The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter the containers IP such as `192.168.1.50`, not `192.168.1.50/24`.
 
 It then installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), downloads Homelab Vault, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site and Caddy configuration if startup fails.
 
