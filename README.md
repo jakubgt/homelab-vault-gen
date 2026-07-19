@@ -74,180 +74,55 @@ docker compose logs -f vault-gen
 docker compose down
 ```
 
-## HTTPS with Caddy on a fresh Debian LXC
+## LAN HTTPS with Caddy on a Debian LXC
 
-This is the simplest LAN-only Caddy deployment: clients open the Debian LXC's reserved IPv4 address directly, so there is no local DNS or hosts-file setup. [Caddy supports IP addresses as site addresses](https://caddyserver.com/docs/caddyfile/concepts#addresses). The included `Caddyfile` contains an intentionally invalid `<LXC_IPV4>` marker. Setup requires the actual address, verifies that it belongs to the container, and replaces the marker before Caddy can start.
+This is the easiest LAN-only setup: each device opens the LXC's IPv4 address directly, such as `https://192.168.1.50`. It needs no local DNS, hostname, or hosts-file entry.
 
-Caddy uses its internal CA for HTTPS. Every Windows computer, phone, tablet, or separate browser trust store that opens the site must trust this deployment's `root.crt` once. Without that import a browser may offer a certificate-warning bypass, but the connection is not authenticated and should not be used to generate credentials.
+Caddy creates a private local certificate authority (CA). Each Windows computer, phone, tablet, or browser-specific trust store must trust its public `root.crt` once. Until then, the browser warning means the connection is not authenticated; do not generate credentials by clicking through it.
 
-This Caddy deployment serves the files directly from `/srv/homelab-vault`; it does not use `docker-compose.yml`, which continues to run NGINX. The Debian commands below are run as `root` inside the LXC.
+### Before you start
 
-### 1. Create the Debian LXC and reserve its address
+- Create and start a Debian LXC with internet access. Run the commands below as `root` inside that container.
+- Give the LXC an address that will not change, either with a static address in Proxmox or a DHCP reservation in the router. The installer verifies the address you enter, but it cannot reserve it for you.
+- Make sure the intended computers and phones can reach the LXC. Guest Wi-Fi isolation or VLAN firewall rules may block it.
 
-Before creating the container, choose one unused address on the LAN. The most direct route is a static address outside the router's DHCP pool. A typical example is `192.168.1.50/24` with gateway `192.168.1.1`, but those values must match the actual LAN. An address conflict will make the service unreliable.
+### 1. Run the installer
 
-In the Proxmox web interface:
-
-1. Download a current Debian standard LXC template under the node's local storage **CT Templates** view.
-2. Select **Create CT**, choose the Debian template, and create an unprivileged container. Nesting is not required. One CPU, 512 MB RAM, and 4 GB disk are ample for this static site.
-3. Attach `eth0` to the LAN bridge, normally `vmbr0`.
-4. Enter the static IPv4 with its CIDR suffix and the LAN gateway. Alternatively, create the CT with **DHCP**, find its generated MAC under **CT > Hardware > Network Device**, reserve the desired address for that MAC in the router, restart the CT, and confirm the reserved address before continuing.
-5. Enable start-at-boot if desired, finish the wizard, start the container, and open its console.
-
-Log in as `root` and confirm the address. Record the bare IPv4 without the CIDR suffix; for example, record `192.168.1.50`, not `192.168.1.50/24`.
+Copy this block into the LXC console:
 
 ```bash
-ip -4 -brief address show scope global
+apt-get update
+apt-get install -y ca-certificates curl
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+  --output /root/install-homelab-vault.sh \
+  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/install-caddy-lxc.sh
+chmod 0700 /root/install-homelab-vault.sh
+/root/install-homelab-vault.sh
 ```
 
-The computers and phones that will use Homelab Vault must be able to reach this address on the same LAN or routed trusted VLAN. Guest Wi-Fi client isolation can prevent access.
+The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
 
-### 2. Update Debian and install Caddy
+It then installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), downloads Homelab Vault, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site and Caddy configuration if startup fails.
 
-Install the prerequisites and Caddy from its [official Debian repository](https://caddyserver.com/docs/install):
+### 2. Allow LAN access
 
-```bash
-(
-  set -eu
-  set -o pipefail
+If the Proxmox or Debian firewall is enabled, allow inbound TCP port `443` to this LXC from the trusted LAN. UDP port `443` is optional for HTTP/3. Do not forward either port from the internet.
 
-  apt update
-  apt full-upgrade -y
-  apt install -y \
-    apt-transport-https ca-certificates curl debian-archive-keyring \
-    debian-keyring git gnupg
+Use the exact URL printed by the installer, such as `https://192.168.1.50`.
 
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-    | gpg --batch --yes --dearmor \
-        -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-    | tee /etc/apt/sources.list.d/caddy-stable.list
-  chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+### 3. Trust the CA on each device
 
-  apt update
-  apt install -y caddy
-  systemctl disable --now caddy
-)
-```
-
-The official package creates the `caddy` service account and systemd service. Disabling the package's starter configuration keeps it offline, including across a reboot, until the IP-specific configuration is ready.
-
-### 3. Download Homelab Vault
-
-```bash
-git clone --depth 1 https://github.com/jakubgt/homelab-vault-gen.git \
-  /opt/homelab-vault-gen
-cd /opt/homelab-vault-gen
-```
-
-### 4. Enter the LXC address and deploy
-
-The following prompt accepts only an IPv4 address currently assigned to this container. It then installs the read-only application files and renders a normal `/etc/caddy/Caddyfile` with that literal address:
-
-```bash
-(
-  set -eu
-  set -o pipefail
-  cd /opt/homelab-vault-gen
-
-  ip -4 -brief address show scope global
-
-  while true; do
-    if ! read -r -p "Enter this LXC's reserved IPv4 address (without /24): " VAULT_IP; then
-      printf '\nNo address entered; nothing was changed.\n'
-      exit 1
-    fi
-
-    if ip -4 -o address show scope global | awk -v ip="$VAULT_IP" '
-      { split($4, address, "/"); if (address[1] == ip) found = 1 }
-      END { exit !found }
-    '; then
-      break
-    fi
-
-    echo "That address is not assigned to this LXC. Check Proxmox networking and try again."
-  done
-
-  install -d -o root -g caddy -m 0750 /srv/homelab-vault
-  install -o root -g caddy -m 0640 \
-    index.html styles.css core.js app.js words.js qrcode.min.js \
-    /srv/homelab-vault/
-  install -d -o root -g caddy -m 0750 /srv/homelab-vault/assets
-  install -o root -g caddy -m 0640 assets/*.png /srv/homelab-vault/assets/
-
-  RENDERED_CADDY="$(mktemp /etc/caddy/Caddyfile.new.XXXXXX)"
-  trap 'rm -f -- "$RENDERED_CADDY"' EXIT
-  sed -e "s|^https://<LXC_IPV4> {|https://${VAULT_IP} {|" \
-    -e '/^[[:space:]]*ip_address_must_be_configured[[:space:]]*$/d' \
-    Caddyfile > "$RENDERED_CADDY"
-  chown root:root "$RENDERED_CADDY"
-  chmod 0644 "$RENDERED_CADDY"
-
-  if grep -Eq '^https://<LXC_IPV4>[[:space:]]*\{|^[[:space:]]*ip_address_must_be_configured[[:space:]]*$' "$RENDERED_CADDY"; then
-    echo "The Caddy IP setup guard remains; Caddy was not changed."
-    exit 1
-  fi
-
-  if ! grep -Fxq "https://${VAULT_IP} {" "$RENDERED_CADDY"; then
-    echo "The Caddy IP marker was not replaced; Caddy was not changed."
-    exit 1
-  fi
-
-  grep -F "https://${VAULT_IP} {" "$RENDERED_CADDY"
-  runuser -u caddy -- env HOME=/var/lib/caddy \
-    /usr/bin/caddy validate --config "$RENDERED_CADDY" --adapter caddyfile
-  mv -f -- "$RENDERED_CADDY" /etc/caddy/Caddyfile
-  trap - EXIT
-
-  systemctl enable caddy
-  if systemctl is-active --quiet caddy; then
-    systemctl reload caddy
-  else
-    systemctl start caddy
-  fi
-  systemctl --no-pager --full status caddy
-
-  systemctl is-active --quiet caddy
-  curl --fail --show-error --max-time 15 --cacert \
-    /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt \
-    -I "https://${VAULT_IP}"
-  printf '\nServer ready at https://%s\n' "$VAULT_IP"
-)
-```
-
-The guarded block stops at the first error, validates a temporary file as Caddy's service account, and only then replaces the live configuration. It is safe to run again: an active service is reloaded, while an inactive service is started. Caddy's private CA state stays under `/var/lib/caddy`. The `skip_install_trust` global option prevents the unprivileged service from trying to modify the LXC or browser trust stores; client trust is installed manually below. If startup or reload fails, inspect the logs:
-
-```bash
-journalctl -u caddy -n 100 --no-pager
-```
-
-### 5. Limit access to the LAN
-
-If the Proxmox firewall is enabled, add an inbound **ACCEPT** rule on this container for TCP destination port `443`, restricted to the trusted LAN CIDR. TCP `80` is optional for HTTP-to-HTTPS redirects, and UDP `443` is optional for HTTP/3. Apply equivalent rules if a Debian firewall is enabled.
-
-Do not create router/WAN port forwards for this LAN-only service. Client devices must use the exact configured URL, such as `https://192.168.1.50`. No DNS record or hosts-file entry is needed.
-
-### 6. Trust Caddy's CA on every client
-
-After Caddy starts, its public root certificate is here:
+The installer temporarily makes the public certificate available at:
 
 ```text
-/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+https://LXC_IP/caddy-root.crt
 ```
 
-Copy **only** `root.crt` to each client through a trusted path, such as an existing SSH/SCP connection, a USB drive, AirDrop, or a trusted local file share. The certificate is public, but its integrity matters: importing an attacker's replacement would trust that attacker.
+It also prints the public certificate file's SHA-256 digest in the trusted LXC console. The certificate is public, but verifying the file prevents you from importing an attacker's replacement. Never copy or expose `root.key`.
 
-If the fresh LXC does not yet have a file-transfer method, use this one-time, hash-verified bootstrap. In the trusted Proxmox console, temporarily publish the public certificate and note its hash:
+#### Windows 11
 
-```bash
-install -o root -g caddy -m 0640 \
-  /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt \
-  /srv/homelab-vault/caddy-root.crt
-sha256sum /srv/homelab-vault/caddy-root.crt
-```
-
-On Windows, enter the LXC's address when prompted and download the certificate. `--insecure` is used only for this bootstrap because the CA is not trusted yet:
+In PowerShell, download the certificate and display the file's SHA-256 digest. `--insecure` is used only for this first download because the CA is not trusted yet.
 
 ```powershell
 $VaultIp = Read-Host 'Enter the LXC IPv4 address'
@@ -257,72 +132,55 @@ curl.exe --insecure --fail --show-error `
 certutil -hashfile .\caddy-root.crt SHA256
 ```
 
-Compare the hexadecimal Windows hash with the hash still visible in the Proxmox console; capitalization and displayed whitespace do not matter. If the values differ, delete the download and do not import it. After an exact match, remove the temporary web copy from the LXC:
+Compare that value with `CA file SHA-256` still visible in the LXC console. If they differ, delete the file and do not import it. If they match, open PowerShell **as Administrator** in the same folder and run:
+
+```powershell
+certutil -addstore -f "Root" .\caddy-root.crt
+```
+
+Completely close and reopen the browser. Firefox may require a separate import under **Settings > Privacy & Security > Certificates > View Certificates > Authorities**. The Windows command follows Microsoft's [`certutil -addstore` documentation](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/certutil).
+
+#### iPhone or iPad
+
+Transfer the digest-verified `caddy-root.crt` from the Windows computer through a trusted method and open it on the device. Promptly open **Settings > Profile Downloaded** and select **Install**; Apple may remove an uninstalled downloaded profile after eight minutes. Then enable it under **Settings > General > About > Certificate Trust Settings**. If Stolen Device Protection blocks profile installation away from a familiar location, follow Apple's prompt and re-enable the protection afterward. Apple documents both [profile installation](https://support.apple.com/en-us/102400) and the required [full-trust setting](https://support.apple.com/en-us/102390).
+
+#### Android
+
+Transfer the same verified file to the device. Search Settings for **Install a certificate**, choose **CA certificate**, and select `caddy-root.crt`. Menu names vary by manufacturer and Android version; a screen lock may be required. Google provides [Pixel certificate instructions](https://support.google.com/pixelphone/answer/2844832).
+
+Some browsers and apps use their own trust stores or deliberately ignore user-installed CAs. If a browser still warns, import the root into that browser's Authorities store. Caddy explains this behavior in its [local HTTPS guidance](https://caddyserver.com/docs/running#local-https-with-systemd).
+
+After all clients are configured, remove the temporary public download from the LXC:
 
 ```bash
 rm -f -- /srv/homelab-vault/caddy-root.crt
 ```
 
-You can transfer that verified Windows copy to phones and other devices. Do not use Homelab Vault or bypass certificate warnings for normal browsing until the root is installed.
+The original CA remains protected under `/var/lib/caddy`. Keep that directory in secured LXC backups; rebuilding without it creates a new CA that every client must trust again.
 
-Never copy, expose, or import `root.key`. Anyone who obtains that private key can impersonate HTTPS sites to devices that trust this CA. Keep `/var/lib/caddy` protected and include it in the LXC's secured backups. Rebuilding the container without restoring that directory creates a new CA that must be trusted again.
+### 4. Update or change the IP
 
-#### Windows 11
-
-Save the file as `caddy-root.crt`. Open Windows Terminal or PowerShell **as Administrator**, move to the folder containing it, compare the displayed SHA-256 hash with the LXC, and then add it to the local computer's Trusted Root Certification Authorities store:
-
-```powershell
-certutil -hashfile .\caddy-root.crt SHA256
-certutil -addstore -f "Root" .\caddy-root.crt
-```
-
-Completely close and reopen the browser. The import command follows [Microsoft's documented `certutil -addstore` flow](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/certutil).
-
-#### iPhone or iPad
-
-Transfer and open `root.crt`, then promptly install the downloaded profile under **Settings > General > VPN & Device Management** (or the **Profile Downloaded** prompt). Apple may remove a downloaded profile after eight minutes if it is not installed. Next, go to **Settings > General > About > Certificate Trust Settings** and enable full trust for that root. Apple requires this second trust step for manually installed roots; see Apple's [profile installation](https://support.apple.com/en-us/102400) and [certificate trust](https://support.apple.com/en-us/102390) instructions. If Stolen Device Protection blocks profile installation away from a familiar location, follow Apple's prompt and re-enable that protection afterward.
-
-#### Android phone or tablet
-
-Menu names and available certificate types vary by manufacturer and Android version. Save `root.crt`, search Settings for **Install a certificate**, choose **CA certificate** if offered, and select the file. On a Pixel the path begins at **Settings > Security & privacy > More security settings > Encryption & credentials**. A screen lock may be required. See [Google's certificate instructions](https://support.google.com/pixelphone/answer/2844832).
-
-Some browsers keep a separate authority store, and some Android apps intentionally ignore user-installed CAs; Android documents this behavior in its [Network Security Configuration guide](https://developer.android.com/privacy-and-security/security-config). If the system import succeeds but a browser still warns, import `root.crt` into that browser's Authorities store as described in [Caddy's local HTTPS guidance](https://caddyserver.com/docs/running#local-https-with-systemd). Do not click through a warning for normal use.
-
-### 7. Verify, update, and troubleshoot
-
-On each client, open the exact address configured in Caddy. After the root import there should be no certificate warning. On Windows, this should also succeed:
-
-```powershell
-$VaultIp = Read-Host 'Enter the LXC IPv4 address'
-curl.exe -I "https://$VaultIp"
-```
-
-Common failures:
-
-- A timeout usually means the address, Proxmox/Debian firewall, VLAN routing, or Wi-Fi client isolation is wrong.
-- A certificate-authority warning means `root.crt` is not trusted by that operating system or browser.
-- A certificate name mismatch means the client used a different IP from the active site address.
-- If the reserved IP changes, rerun step 4 with the new assigned address. Caddy will validate and reload the configuration, then issue a new leaf certificate from the same local CA.
-
-To update the application later, pull the repository and reinstall the runtime files. Static-file changes take effect immediately:
+The installer creates one update command. Run it as `root` whenever the repository changes or the LXC gets a new reserved address:
 
 ```bash
-(
-  set -eu
-  cd /opt/homelab-vault-gen
-  git pull --ff-only
-  install -o root -g caddy -m 0640 \
-    index.html styles.css core.js app.js words.js qrcode.min.js \
-    /srv/homelab-vault/
-  install -o root -g caddy -m 0640 assets/*.png /srv/homelab-vault/assets/
-)
+homelab-vault-update
 ```
 
-If the repository's `Caddyfile` changes, rerun the entire guarded block in step 4. It prompts for the assigned IP again, validates and installs the new configuration atomically, and reloads the active service.
+Enter the current LXC IPv4 address when prompted. The updater downloads the current installer, uses a fast-forward-only Git pull, stages the explicit runtime files, revalidates Caddy, and keeps the existing CA.
 
-The `Caddyfile` also contains commented alternatives for same-machine `https://localhost` and a public domain. Enable exactly one site block and validate before every reload.
+### Troubleshooting
 
-`nginx.conf` is designed for the unprivileged Docker image and its `/usr/share/nginx/html` root; it is not a drop-in host NGINX site configuration.
+```bash
+systemctl --no-pager --full status caddy
+journalctl -u caddy -n 100 --no-pager
+```
+
+- A timeout normally points to the IP, firewall, VLAN routing, or Wi-Fi client isolation.
+- An authority warning means the CA is not trusted by that operating system or browser.
+- A name-mismatch warning means the client used a different IP from the one entered during installation.
+- To make the public CA download available again, rerun `homelab-vault-update`.
+
+The repository `Caddyfile` keeps commented examples for same-machine localhost and a public domain. The installer uses the default LAN-IP block. This deployment serves files directly from `/srv/homelab-vault`; it does not use `docker-compose.yml`.
 
 ## Security model
 
@@ -371,19 +229,9 @@ node --check test.js
 node test.js
 ```
 
-The suite imports the same `core.js` used by the browser and checks:
+The suite checks the random-integer and generation guarantees, entropy calculations, pattern parsing, audited wordlist, security headers, browser integration, and deployment templates. GitHub Actions also checks the Debian installer syntax and executable bit and validates the Compose file. Dependabot is configured for monthly GitHub Actions and Docker dependency checks.
 
-- deterministic rejection of biased Uint32 boundary values;
-- random-integer range safety and invalid-input guards;
-- symbol normalization and strict character-class guarantees, including tight edge cases;
-- exact class-constrained entropy;
-- valid and invalid pattern parsing;
-- EFF wordlist length, format, uniqueness, and an audited sequence digest;
-- CSP, QR cleanup, storage isolation, script ordering, and Docker asset integration.
-
-GitHub Actions also checks JavaScript syntax and validates the Compose file. Dependabot is configured for monthly GitHub Actions and Docker dependency checks.
-
-For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image pinned by a multi-platform digest (`nginxinc/nginx-unprivileged@sha256:…`) after verifying that digest in your registry.
+For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image pinned by a multi-platform digest (`nginxinc/nginx-unprivileged@sha256:...`) after verifying that digest in your registry.
 
 ## Project layout
 
@@ -395,7 +243,8 @@ For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image
 | `qrcode.min.js` | Vendored local QR renderer |
 | `docker-compose.yml`, `nginx.conf` | Unprivileged container deployment |
 | `Caddyfile` | Required-IP LAN HTTPS template and deployment alternatives |
-| `test.js` | Zero-dependency production-core tests |
+| `install-caddy-lxc.sh` | Guided Debian LXC installation and update script |
+| `test.js` | Zero-dependency production-core and integration tests |
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, digest, and license information for vendored assets, and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

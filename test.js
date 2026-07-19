@@ -183,12 +183,13 @@ const nginx = read('nginx.conf');
 const caddy = read('Caddyfile');
 const compose = read('docker-compose.yml');
 const readme = read('README.md');
+const installer = read('install-caddy-lxc.sh');
 const activeCaddy = caddy
     .split(/\r?\n/)
     .filter((line) => !/^\s*#/.test(line))
     .join('\n');
-const renderedCaddy = activeCaddy
-    .replace('<LXC_IPV4>', '192.0.2.1')
+const renderedCaddy = caddy
+    .replace(/^https:\/\/<LXC_IPV4>\s*\{/m, 'https://192.0.2.1 {')
     .replace(/^\s*ip_address_must_be_configured\s*$/m, '');
 
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
@@ -208,20 +209,54 @@ check(
 );
 check(
     'Caddy IP template renders one exact active address',
-    !renderedCaddy.includes('<LXC_IPV4>') &&
-        !renderedCaddy.includes('ip_address_must_be_configured') &&
+    !/^https:\/\/<LXC_IPV4>\s*\{/m.test(renderedCaddy) &&
+        !/^\s*ip_address_must_be_configured\s*$/m.test(renderedCaddy) &&
         (renderedCaddy.match(/^https:\/\/192\.0\.2\.1\s*\{/gm) || []).length === 1
 );
 check('Caddy skips automatic host trust-store changes', /^\s*skip_install_trust\s*$/m.test(activeCaddy));
+check('Caddy hides the installer ownership marker', /^\s*hide \.homelab-vault-managed\s*$/m.test(activeCaddy));
 check(
     'Caddy leaves localhost and vault.lan alternatives disabled',
     !/^localhost\s*\{/m.test(activeCaddy) && !/^https:\/\/vault\.lan\s*\{/m.test(activeCaddy)
 );
 check(
-    'README prompts for and verifies the LXC IPv4 before Caddy starts',
-    readme.includes("Enter this LXC's reserved IPv4 address") &&
-        readme.includes('ip -4 -o address show scope global') &&
-        readme.includes('s|^https://<LXC_IPV4> {|https://${VAULT_IP} {|')
+    'README uses the guided Debian LXC installer',
+    readme.includes('install-caddy-lxc.sh') &&
+        readme.includes('homelab-vault-update') &&
+        readme.includes('The installer verifies the address you enter, but it cannot reserve it for you')
+);
+check(
+    'installer prompts for an IPv4 address assigned to the LXC',
+    installer.includes("Enter this LXC's reserved IPv4 address") &&
+        installer.includes('ip -4 -o address show scope global') &&
+        installer.includes('END { exit !found }')
+);
+check(
+    'installer renders and validates the guarded Caddy template',
+    installer.includes('s|^https://<LXC_IPV4> {|https://${VAULT_IP} {|') &&
+        installer.includes('ip_address_must_be_configured') &&
+        installer.includes("^https://<LXC_IPV4>[[:space:]]*\\{") &&
+        installer.includes('/usr/bin/caddy validate') &&
+        installer.includes('restore_previous_caddy')
+);
+check(
+    'installer uses the official Caddy repository without a full OS upgrade',
+    installer.includes('https://dl.cloudsmith.io/public/caddy/stable/gpg.key') &&
+        installer.includes('apt-get install -y caddy') &&
+        !installer.includes('full-upgrade') &&
+        !installer.includes('apt-get upgrade')
+);
+check(
+    'installer publishes only the public CA certificate',
+    installer.includes('caddy-root.crt') &&
+        installer.includes('sha256sum "$PUBLIC_CA"') &&
+        !installer.includes('/root.key')
+);
+check(
+    'installer stages site updates and installs a current-version updater',
+    installer.includes('/srv/.homelab-vault.new.XXXXXX') &&
+        installer.includes('SITE_MUTATION_BEGUN=1') &&
+        installer.includes('https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/install-caddy-lxc.sh')
 );
 
 console.log(`\n${'-'.repeat(58)}`);
