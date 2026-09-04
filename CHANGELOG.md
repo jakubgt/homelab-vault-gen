@@ -14,7 +14,7 @@ This release fixes concealed credential exposure, focus-loss cleanup, and a clip
 ## Usability
 
 - Added built-in strong-password, alphanumeric, config-friendly, readable-passphrase, and numeric-PIN presets, plus up to 20 named local presets.
-- Added actual output length, an advisory target length limit, and lowercase usernames. Credentials are never silently truncated or filtered.
+- Added actual output length, an advisory target length limit, a password allowed-character preview, and lowercase usernames. Credentials are never silently truncated or filtered.
 - Bulk exports yield between batches, show progress, and can be cancelled. Generation settings stay fixed while a batch runs.
 - Enlarged QR white margins to cover at least four modules, including in dark mode.
 - Added About/status with version, source/deployed commit, connection type, and license links, plus a visible remote-HTTP warning.
@@ -24,7 +24,7 @@ This release fixes concealed credential exposure, focus-loss cleanup, and a clip
 
 - The LXC installer and update command deploy installer and assets from one resolved release commit, verify installer consistency, lock concurrent operations, and preserve rollback and the existing Caddy CA.
 - Added status and check-update commands. Default updates select stable release tags; explicit tags and full commit SHAs are supported.
-- Dependabot now uses the Docker Compose ecosystem for the overridable image default. The healthcheck uses IPv4 loopback.
+- Dependabot now uses the Docker Compose ecosystem for the overridable image default and tracks the new npm development dependencies. The healthcheck uses IPv4 loopback.
 - Deployed assets include build metadata and license/third-party notices. Integrity-checked text files use LF line endings.
 - Releases include an offline ZIP, SHA256SUMS, and a per-file manifest. The archive records its source commit and excludes development dependencies.
 

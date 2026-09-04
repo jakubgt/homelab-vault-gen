@@ -117,6 +117,12 @@
                     <label for="sym-input" class="visually-hidden">Custom symbols</label>
                     <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&amp;*()-_=+[]{};:,.&lt;&gt;/?|~" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
                 </div>
+
+                <details id="allowed-characters" class="full-width-opt allowed-characters">
+                    <summary>Allowed characters <span id="allowed-character-count"></span></summary>
+                    <code id="allowed-character-preview" aria-live="polite" aria-atomic="true"></code>
+                    <p class="opt-desc no-indent">Reflects selected character sets and ambiguous-character exclusions.</p>
+                </details>
             </section>
 
             <section id="pattern-options" class="options-grid" role="tabpanel" aria-labelledby="tab-pattern" hidden>

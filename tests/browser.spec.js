@@ -417,6 +417,31 @@ test('built-in PIN preset preserves numeric-only generation', async ({ page }) =
     await expect(page.locator('#opt-syms')).not.toBeChecked();
 });
 
+test('allowed-character preview follows presets, exclusions and normalized custom symbols', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('.preset-panel > summary').click();
+    await page.locator('#profile-select').selectOption('alphanumeric');
+    await page.locator('#allowed-characters > summary').click();
+    const preview = page.locator('#allowed-character-preview');
+    await expect(preview).toHaveText('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
+    await expect(page.locator('#allowed-character-count')).toHaveText('(62)');
+    await page.locator('#opt-upper').uncheck();
+    await page.locator('#opt-ambig').check();
+    await expect(preview).toHaveText('abcdefghijkmnopqrstuvwxyz23456789');
+    await expect(page.locator('#allowed-character-count')).toHaveText('(33)');
+    await page.locator('#opt-syms').check();
+    await page.locator('#symbol-preset').selectOption('custom');
+    await page.locator('#sym-input').fill('!!<<..a 0💡');
+    await expect(preview).toHaveText('abcdefghijkmnopqrstuvwxyz23456789!<.');
+    await expect(page.locator('#allowed-character-count')).toHaveText('(36)');
+    await page.locator('#opt-paranoid').check();
+    await expect(page.locator('#result')).toHaveText('Credential hidden');
+    await expect(preview).toHaveText('abcdefghijkmnopqrstuvwxyz23456789!<.');
+    for (const id of ['opt-lower', 'opt-nums', 'opt-syms']) await page.locator(`#${id}`).uncheck();
+    await expect(preview).toHaveText('Select at least one character set.');
+    await expect(page.locator('#allowed-character-count')).toHaveText('(unavailable)');
+});
+
 test('normalizing a numeric input after loading a preset regenerates the displayed credential', async ({ page }) => {
     await page.goto('/');
     await page.locator('#tab-user').click();
@@ -439,7 +464,7 @@ test('normalizing a numeric input after loading a preset regenerates the display
 test('320px layout keeps all modes, expanded settings and the QR inside the viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 780 });
     await page.goto('/');
-    for (const summary of ['.preset-panel > summary', '.export-panel > summary', '.about-panel > summary']) {
+    for (const summary of ['.preset-panel > summary', '.export-panel > summary', '.about-panel > summary', '#allowed-characters > summary']) {
         await page.locator(summary).click();
     }
     for (const mode of ['pwd', 'pass', 'user', 'pattern']) {

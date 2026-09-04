@@ -40,7 +40,44 @@ jobs:
         run: |
           version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
           tag="v$version"
-          gh release create "$tag" --target "$(git rev-parse HEAD)" --draft \
-            --title "Homelab Vault $tag" --notes-file CHANGELOG.md
-          gh release upload "$tag" dist/*
+          commit=$(git rev-parse HEAD)
+          verify_tag() {
+            if refs=$(git ls-remote --exit-code origin "refs/tags/$tag" "refs/tags/$tag^{}"); then
+              tag_commit=$(printf '%s\n' "$refs" | awk '/\^\{\}$/ { peeled=$1 } !/\^\{\}$/ { direct=$1 } END { print peeled ? peeled : direct }')
+              if [[ "$tag_commit" != "$commit" ]]; then
+                echo "Refusing release: $tag points to $tag_commit, expected $commit." >&2
+                exit 1
+              fi
+            else
+              status=$?
+              # A draft may not have created its tag yet. Other lookup failures
+              # must stop publication, rather than be mistaken for an absent tag.
+              if [[ "$status" -ne 2 ]]; then exit "$status"; fi
+            fi
+          }
+          verify_tag
+          release_info=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | [.id, .draft, .target_commitish] | @tsv")
+          if [[ -n "$release_info" ]]; then
+            if [[ "$release_info" == *$'\n'* ]]; then
+              echo "Refusing ambiguous duplicate releases for $tag." >&2
+              exit 1
+            fi
+            IFS=$'\t' read -r release_id is_draft target <<< "$release_info"
+            if [[ "$is_draft" != true ]]; then
+              echo "Release $tag is already published; leaving it and its assets unchanged." >&2
+              exit 1
+            fi
+            if [[ "$target" != "$commit" ]]; then
+              echo "Refusing draft $release_id: target $target is not the exact commit $commit." >&2
+              exit 1
+            fi
+            echo "Resuming matching draft $release_id for $tag."
+          else
+            gh release create "$tag" --target "$commit" --draft \
+              --title "Homelab Vault $tag" --notes-file CHANGELOG.md
+          fi
+          verify_tag
+          gh release upload "$tag" dist/* --clobber
+          verify_tag
           gh release edit "$tag" --draft=false --latest

@@ -503,6 +503,29 @@ input[type="checkbox"] {
     font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
+.allowed-characters summary {
+    min-height: 28px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.allowed-characters[open] summary {
+    margin-bottom: 8px;
+}
+
+#allowed-character-preview {
+    display: block;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    font-size: 0.82rem;
+    user-select: all;
+}
+
 .amount-row,
 .label-row,
 .setting-row {

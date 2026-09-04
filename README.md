@@ -268,7 +268,7 @@ dash tests/test-installer.sh
 python3 tests/test-release.py
 ```
 
-The shell harness exercises actual temporary-directory rollback and mocks service/package actions. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, and deterministic release packaging. Dependabot checks GitHub Actions and Docker Compose monthly. A tagged release or a version.js change on main runs the full suite before publication.
+The shell harness exercises actual temporary-directory rollback and mocks service/package actions. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, and deterministic release packaging. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A tagged release or a version.js change on main runs the full suite before publication.
 
 For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image pinned by a multi-platform digest (`nginxinc/nginx-unprivileged@sha256:...`) after verifying that digest in your registry.
 

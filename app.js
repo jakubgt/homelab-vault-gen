@@ -50,6 +50,8 @@ const el = {
     patternInput: document.getElementById('pattern-input'),
     symbolPreset: document.getElementById('symbol-preset'),
     symInput: document.getElementById('sym-input'),
+    allowedCharacterPreview: document.getElementById('allowed-character-preview'),
+    allowedCharacterCount: document.getElementById('allowed-character-count'),
     paranoidOverlay: document.getElementById('paranoid-overlay'),
     poolInfo: document.getElementById('pool-info'),
     insecureWarning: document.getElementById('insecure-warning'),
@@ -280,6 +282,16 @@ function getPasswordCharsets() {
     return { sets: filtered };
 }
 
+function updateAllowedCharacters() {
+    const selection = getPasswordCharsets();
+    const pool = selection.error ? '' : selection.sets.join('');
+    const preview = selection.error || pool;
+    el.allowedCharacterCount.textContent = selection.error ? '(unavailable)' : `(${pool.length})`;
+    if (el.allowedCharacterPreview.textContent !== preview) {
+        el.allowedCharacterPreview.textContent = preview;
+    }
+}
+
 function generatePassword(skipDomUpdate = false) {
     wipeMemory();
     const selection = getPasswordCharsets();
@@ -371,6 +383,7 @@ function generateValue(skipDomUpdate = false) {
 
 function generate() {
     cancelBulkExport();
+    if (currentMode === 'pwd') updateAllowedCharacters();
     if (!hasSecureRandom()) {
         setGenerationError('Secure generation is unavailable in this browser.');
         return null;
@@ -630,6 +643,7 @@ function applySymbolPreset() {
 }
 
 function updateUI(shouldGenerate = true) {
+    if (!shouldGenerate) updateAllowedCharacters();
     for (const mode of MODES) {
         const active = currentMode === mode;
         const tab = tabByMode[mode];
