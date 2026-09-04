@@ -1,0 +1,20 @@
+{
+  "name": "homelab-vault-gen",
+  "version": "2.2.0",
+  "private": true,
+  "description": "Offline credential generator with development-only browser regression tooling",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node test.js && node test-core.cjs",
+    "test:browser": "playwright test",
+    "test:browser:headed": "playwright test --headed",
+    "test:all": "npm test && npm run test:browser"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "jsqr": "1.4.0"
+  }
+}

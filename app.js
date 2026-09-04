@@ -5,16 +5,19 @@ const {
     DEFAULT_SYMS,
     CONFIG_FRIENDLY_SYMS,
     calculatePasswordEntropy,
+    calculatePassphraseEntropy,
     generatePasswordBytes,
+    generatePassphraseBytes,
+    generateUsernameBytes,
     getSecureRandomInt,
     normalizeSymbolPool,
     parsePattern
 } = VaultCore;
 
-const RANDOM_SEPARATOR_POOL = '!@#$%^&*-_=+';
 const STORAGE_KEYS = Object.freeze({
     settings: 'vault_settings',
-    theme: 'vault_theme'
+    theme: 'vault_theme',
+    profiles: 'vault_profiles'
 });
 const MODES = Object.freeze(['pwd', 'pass', 'user', 'pattern']);
 
@@ -57,6 +60,22 @@ const el = {
     bulkCount: document.getElementById('bulk-count'),
     exportCsvBtn: document.getElementById('export-csv-btn'),
     exportTxtBtn: document.getElementById('export-txt-btn'),
+    exportJsonBtn: document.getElementById('export-json-btn'),
+    clearBtn: document.getElementById('clear-btn'),
+    clearCountdown: document.getElementById('clear-countdown'),
+    outputLength: document.getElementById('output-length'),
+    targetMaxLength: document.getElementById('target-max-length'),
+    compatibilityWarning: document.getElementById('compatibility-warning'),
+    csvDialog: document.getElementById('csv-export-dialog'),
+    csvAck: document.getElementById('csv-text-ack'),
+    csvConfirm: document.getElementById('csv-export-confirm'),
+    bulkStatus: document.getElementById('bulk-status'),
+    bulkProgress: document.getElementById('bulk-progress'),
+    bulkProgressText: document.getElementById('bulk-progress-text'),
+    profileSelect: document.getElementById('profile-select'),
+    profileName: document.getElementById('profile-name'),
+    profileSave: document.getElementById('profile-save-btn'),
+    profileDelete: document.getElementById('profile-delete-btn'),
     resetSettingsBtn: document.getElementById('reset-settings-btn'),
     toast: document.getElementById('toast')
 };
@@ -81,6 +100,12 @@ let activeSecretBuffer = null;
 let currentResult = null;
 let clearTimer = null;
 let toastTimer = null;
+let generationRevision = 0;
+let copyRequest = 0;
+let clearDeadline = 0;
+let countdownTimer = null;
+let bulkJob = null;
+let savedProfiles = [];
 
 function hasSecureRandom() {
     return Boolean(window.crypto && typeof window.crypto.getRandomValues === 'function');
@@ -114,7 +139,11 @@ function closeQr() {
 
 function cancelClearTimer() {
     clearTimeout(clearTimer);
+    clearInterval(countdownTimer);
     clearTimer = null;
+    countdownTimer = null;
+    clearDeadline = 0;
+    el.clearCountdown.textContent = '';
     el.copyBtn.textContent = 'Copy';
 }
 
@@ -129,15 +158,23 @@ function resetMetrics() {
 }
 
 function updateActionAvailability() {
+    document.querySelectorAll('.controls input, .controls select, .controls button, .tabs button, .preset-panel input, .preset-panel select, .preset-panel button').forEach((control) => {
+        if (control.id !== 'opt-paranoid' && control.id !== 'bulk-cancel-btn') control.disabled = Boolean(bulkJob);
+    });
     const canGenerate = hasSecureRandom();
     const hasResult = typeof currentResult === 'string' && currentResult.length > 0;
-    const allowFiles = hasResult && canGenerate && !isParanoid();
+    const allowFiles = hasResult && canGenerate && !isParanoid() && !bulkJob;
 
-    el.generateBtn.disabled = !canGenerate;
+    el.generateBtn.disabled = !canGenerate || Boolean(bulkJob);
     el.copyBtn.disabled = !hasResult;
     el.qrBtn.disabled = !hasResult;
     el.exportCsvBtn.disabled = !allowFiles;
     el.exportTxtBtn.disabled = !allowFiles;
+    el.exportJsonBtn.disabled = !allowFiles;
+    el.clearBtn.disabled = !hasResult && !bulkJob;
+    el.paranoidOverlay.disabled = !hasResult;
+    el.profileSave.disabled = isParanoid() || Boolean(bulkJob);
+    el.profileDelete.disabled = isParanoid() || Boolean(bulkJob) || !el.profileSelect.value.startsWith('saved:');
 }
 
 function setParanoidReveal(revealed) {
@@ -145,6 +182,22 @@ function setParanoidReveal(revealed) {
     document.body.classList.toggle('paranoid-revealed', shouldReveal);
     el.paranoidOverlay.textContent = shouldReveal ? 'Hide' : 'Reveal';
     el.paranoidOverlay.setAttribute('aria-pressed', String(shouldReveal));
+    renderResult();
+}
+
+function renderResult() {
+    const concealed = isParanoid() && !document.body.classList.contains('paranoid-revealed');
+    el.result.textContent = currentResult ? (concealed ? 'Credential hidden' : currentResult) : '';
+    el.result.classList.toggle('concealed', Boolean(currentResult && concealed));
+}
+
+function updateCompatibility() {
+    const length = currentResult ? currentResult.length : 0;
+    el.outputLength.textContent = length ? `${length} characters` : 'No credential';
+    const limit = Number(el.targetMaxLength.value);
+    const tooLong = Boolean(length && limit > 0 && length > limit);
+    el.compatibilityWarning.textContent = tooLong ? `Exceeds the target limit by ${length - limit} characters. Adjust your generation settings; the credential has not been shortened.` : '';
+    el.compatibilityWarning.classList.toggle('hidden', !tooLong);
 }
 
 function clearGenerationError() {
@@ -156,18 +209,19 @@ function clearGenerationError() {
 }
 
 function setResult(value) {
+    generationRevision++;
     closeQr();
     cancelClearTimer();
     clearGenerationError();
-    setParanoidReveal(false);
-
     currentResult = value;
-    el.result.textContent = value;
+    setParanoidReveal(false);
     el.resultContainer.classList.add('has-result');
     updateActionAvailability();
+    updateCompatibility();
 }
 
 function setGenerationError(message, input = null) {
+    generationRevision++;
     closeQr();
     cancelClearTimer();
     wipeMemory();
@@ -179,9 +233,13 @@ function setGenerationError(message, input = null) {
     if (input) input.setAttribute('aria-invalid', 'true');
     resetMetrics();
     updateActionAvailability();
+    updateCompatibility();
 }
 
 function wipeSecret() {
+    generationRevision++;
+    copyRequest++;
+    cancelBulkExport();
     closeQr();
     cancelClearTimer();
     wipeMemory();
@@ -192,6 +250,7 @@ function wipeSecret() {
     clearGenerationError();
     resetMetrics();
     updateActionAvailability();
+    updateCompatibility();
 }
 
 function readIntField(id, min, max, fallback) {
@@ -269,195 +328,134 @@ function generatePattern(skipDomUpdate = false) {
     return generatedText;
 }
 
+function getPassphraseOptions() {
+    return {
+        count: lengths.pass,
+        separator: document.getElementById('opt-pass-sep').value,
+        capitalize: document.getElementById('opt-pass-caps').checked,
+        randomizeCaps: document.getElementById('opt-pass-caps-rand').checked,
+        insertNumbers: document.getElementById('opt-pass-nums').checked,
+        numberCount: readIntField('pass-num-count', 1, 10, 2),
+        randomizePositions: document.getElementById('opt-pass-nums-rand').checked
+    };
+}
+
 function generatePassphrase(skipDomUpdate = false) {
     wipeMemory();
-
-    const count = lengths.pass;
-    const separatorChoice = document.getElementById('opt-pass-sep').value;
-    const capitalize = document.getElementById('opt-pass-caps').checked;
-    const randomizeCaps = document.getElementById('opt-pass-caps-rand').checked;
-    const insertNumbers = document.getElementById('opt-pass-nums').checked;
-    const numberCount = readIntField('pass-num-count', 1, 10, 2);
-    const randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
-
-    const wordIndices = [];
-    const capitalizationMask = [];
-    let totalLength = 0;
-
-    for (let index = 0; index < count; index++) {
-        const wordIndex = getSecureRandomInt(WORDS.length);
-        wordIndices.push(wordIndex);
-        totalLength += WORDS[wordIndex].length;
-        capitalizationMask.push(capitalize && (!randomizeCaps || getSecureRandomInt(2) === 1));
-    }
-
-    if (insertNumbers && !randomizePositions) totalLength += numberCount * count;
-    if (count > 1) totalLength += count - 1;
-    if (insertNumbers && randomizePositions) totalLength += numberCount;
-
-    activeSecretBuffer = new Uint8Array(totalLength);
-    let offset = 0;
-
-    const writeString = (value) => {
-        for (let index = 0; index < value.length; index++) {
-            activeSecretBuffer[offset++] = value.charCodeAt(index);
-        }
-    };
-
-    for (let index = 0; index < count; index++) {
-        const word = WORDS[wordIndices[index]];
-        if (capitalizationMask[index]) {
-            activeSecretBuffer[offset++] = word.charCodeAt(0) - 32;
-            writeString(word.slice(1));
-        } else {
-            writeString(word);
-        }
-
-        if (insertNumbers && !randomizePositions) {
-            for (let numberIndex = 0; numberIndex < numberCount; numberIndex++) {
-                activeSecretBuffer[offset++] = 48 + getSecureRandomInt(10);
-            }
-        }
-
-        if (index < count - 1) {
-            if (separatorChoice === 'random') {
-                activeSecretBuffer[offset++] = RANDOM_SEPARATOR_POOL.charCodeAt(getSecureRandomInt(RANDOM_SEPARATOR_POOL.length));
-            } else {
-                writeString(separatorChoice);
-            }
-        }
-    }
-
-    if (insertNumbers && randomizePositions) {
-        let currentLength = offset;
-        for (let index = 0; index < numberCount; index++) {
-            const targetIndex = getSecureRandomInt(currentLength + 1);
-            for (let shiftIndex = currentLength; shiftIndex > targetIndex; shiftIndex--) {
-                activeSecretBuffer[shiftIndex] = activeSecretBuffer[shiftIndex - 1];
-            }
-            activeSecretBuffer[targetIndex] = 48 + getSecureRandomInt(10);
-            currentLength++;
-        }
-    }
-
-    const generatedText = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(generatedText);
-    return generatedText;
+    activeSecretBuffer = generatePassphraseBytes(getPassphraseOptions(), WORDS);
+    const text = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) setResult(text);
+    return text;
 }
 
 function generateUsername(skipDomUpdate = false) {
     wipeMemory();
+    activeSecretBuffer = generateUsernameBytes({
+        count: lengths.user,
+        separator: document.getElementById('opt-user-sep').value,
+        appendNumbers: document.getElementById('opt-user-nums').checked,
+        numberCount: readIntField('user-num-count', 1, 9, 3),
+        lowercase: document.getElementById('opt-user-lower').checked
+    }, WORDS);
+    const text = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) setResult(text);
+    return text;
+}
 
-    const count = lengths.user;
-    const separator = document.getElementById('opt-user-sep').value;
-    const appendNumbers = document.getElementById('opt-user-nums').checked;
-    const numberCount = readIntField('user-num-count', 1, 9, 3);
-    const wordIndices = [];
-    let totalLength = 0;
-
-    for (let index = 0; index < count; index++) {
-        const wordIndex = getSecureRandomInt(WORDS.length);
-        wordIndices.push(wordIndex);
-        totalLength += WORDS[wordIndex].length;
-    }
-
-    totalLength += separator.length * Math.max(0, count - 1);
-    if (appendNumbers) totalLength += numberCount + (separator ? separator.length : 0);
-
-    activeSecretBuffer = new Uint8Array(totalLength);
-    let offset = 0;
-
-    const writeString = (value) => {
-        for (let index = 0; index < value.length; index++) {
-            activeSecretBuffer[offset++] = value.charCodeAt(index);
-        }
-    };
-
-    for (let index = 0; index < count; index++) {
-        const word = WORDS[wordIndices[index]];
-        activeSecretBuffer[offset++] = word.charCodeAt(0) - 32;
-        writeString(word.slice(1));
-        if (index < count - 1) writeString(separator);
-    }
-
-    if (appendNumbers) {
-        if (separator) writeString(separator);
-        for (let index = 0; index < numberCount; index++) {
-            activeSecretBuffer[offset++] = 48 + getSecureRandomInt(10);
-        }
-    }
-
-    const generatedText = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(generatedText);
-    return generatedText;
+function generateValue(skipDomUpdate = false) {
+    if (currentMode === 'pwd') return generatePassword(skipDomUpdate);
+    if (currentMode === 'pass') return generatePassphrase(skipDomUpdate);
+    if (currentMode === 'user') return generateUsername(skipDomUpdate);
+    return generatePattern(skipDomUpdate);
 }
 
 function generate() {
+    cancelBulkExport();
     if (!hasSecureRandom()) {
         setGenerationError('Secure generation is unavailable in this browser.');
         return null;
     }
-
-    clearGenerationError();
-    let generatedText = null;
-
-    if (currentMode === 'pwd') generatedText = generatePassword();
-    if (currentMode === 'pass') generatedText = generatePassphrase();
-    if (currentMode === 'user') generatedText = generateUsername();
-    if (currentMode === 'pattern') generatedText = generatePattern();
-
-    if (generatedText && currentMode !== 'user') calculateEntropyAndStrength();
-    return generatedText;
+    try {
+        clearGenerationError();
+        const text = generateValue();
+        if (text && currentMode !== 'user') calculateEntropyAndStrength();
+        return text;
+    } catch (error) {
+        setGenerationError(error.message || 'Generation failed.');
+        return null;
+    }
 }
 
-function bulkExport(format) {
-    if (isParanoid()) {
-        showToast('File export is disabled in Paranoid mode.');
-        return;
-    }
-    if (!hasSecureRandom()) {
-        showToast('Secure generation is unavailable.');
-        return;
-    }
+function cancelBulkExport() {
+    if (!bulkJob) return;
+    bulkJob.cancelled = true;
+    bulkJob = null;
+    wipeMemory();
+    el.bulkStatus.classList.add('hidden');
+    updateActionAvailability();
+}
 
+async function bulkExport(format, csvAcknowledged = false) {
+    if (isParanoid() || !hasSecureRandom() || bulkJob || !currentResult) return;
+    if (format === 'csv' && !csvAcknowledged) {
+        el.csvAck.checked = false;
+        el.csvConfirm.disabled = true;
+        el.csvDialog.showModal();
+        el.csvAck.focus();
+        return;
+    }
     const count = readIntField('bulk-count', 1, 10000, 50);
     el.bulkCount.value = String(count);
+    const job = { cancelled: false, revision: generationRevision, mode: currentMode };
     const results = [];
-
-    for (let index = 0; index < count; index++) {
-        let result = null;
-        if (currentMode === 'pwd') result = generatePassword(true);
-        if (currentMode === 'pass') result = generatePassphrase(true);
-        if (currentMode === 'user') result = generateUsername(true);
-        if (currentMode === 'pattern') result = generatePattern(true);
-        if (!result) break;
-        results.push(result);
+    bulkJob = job;
+    el.bulkStatus.classList.remove('hidden');
+    el.bulkProgress.max = count;
+    el.bulkProgress.value = 0;
+    el.bulkProgressText.textContent = `0 / ${count}`;
+    updateActionAvailability();
+    try {
+        // Yield between short batches so cancellation and privacy events can run.
+        while (results.length < count) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            if (job.cancelled || isParanoid() || job.revision !== generationRevision) return;
+            const started = performance.now();
+            do {
+                const result = generateValue(true);
+                if (!result) throw new Error('Check the generation settings.');
+                results.push(result);
+            } while (results.length < count && results.length % 25 !== 0 && performance.now() - started < 8);
+            el.bulkProgress.value = results.length;
+            el.bulkProgressText.textContent = `${results.length} / ${count}`;
+        }
+        if (job.cancelled || isParanoid() || job.revision !== generationRevision) return;
+        const output = format === 'csv'
+            ? `\uFEFFCredential\r\n${results.map((result) => `"${result.replace(/"/g, '""')}"`).join('\r\n')}`
+            : format === 'json' ? JSON.stringify(results, null, 2) : results.join('\n');
+        const mime = { csv: 'text/csv', json: 'application/json', txt: 'text/plain' }[format];
+        const url = URL.createObjectURL(new Blob([output], { type: `${mime};charset=utf-8` }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `homelab_vault_${job.mode}_x${count}_${Date.now()}.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Give browsers time to consume the download before releasing the Blob.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setResult(results[results.length - 1]);
+        if (currentMode !== 'user') calculateEntropyAndStrength();
+        showToast(`Exported ${count} credentials. Store the file securely.`);
+    } catch (error) {
+        showToast(`Export failed. ${error.message}`);
+    } finally {
+        results.fill('');
+        if (bulkJob === job) {
+            bulkJob = null;
+            wipeMemory();
+            el.bulkStatus.classList.add('hidden');
+            updateActionAvailability();
+        }
     }
-
-    if (results.length !== count) {
-        generate();
-        showToast('Export failed. Check the generation settings.');
-        return;
-    }
-
-    setResult(results[results.length - 1]);
-    if (currentMode !== 'user') calculateEntropyAndStrength();
-
-    const output = format === 'csv'
-        ? `\uFEFFCredential\r\n${results.map((result) => `"${result.replace(/"/g, '""')}"`).join('\r\n')}`
-        : results.join('\n');
-    const mimeType = format === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8';
-    const blobUrl = URL.createObjectURL(new Blob([output], { type: mimeType }));
-    const downloadLink = document.createElement('a');
-
-    downloadLink.href = blobUrl;
-    downloadLink.download = `homelab_vault_${currentMode}_x${results.length}_${Date.now()}.${format}`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
-    URL.revokeObjectURL(blobUrl);
-    wipeMemory();
-    showToast(`Exported ${results.length} credentials. Store the file securely.`);
 }
 
 function formatCrackTime(seconds) {
@@ -492,18 +490,8 @@ function calculateEntropyAndStrength() {
     let entropy = 0;
 
     if (currentMode === 'pass') {
-        entropy = lengths.pass * Math.log2(WORDS.length);
-        if (document.getElementById('opt-pass-caps').checked && document.getElementById('opt-pass-caps-rand').checked) {
-            entropy += lengths.pass;
-        }
-        if (document.getElementById('opt-pass-sep').value === 'random') {
-            entropy += Math.max(0, lengths.pass - 1) * Math.log2(RANDOM_SEPARATOR_POOL.length);
-        }
-        if (document.getElementById('opt-pass-nums').checked) {
-            const numberCount = readIntField('pass-num-count', 1, 10, 2);
-            const randomizePositions = document.getElementById('opt-pass-nums-rand').checked;
-            entropy += (randomizePositions ? numberCount : numberCount * lengths.pass) * Math.log2(10);
-        }
+entropy = calculatePassphraseEntropy(getPassphraseOptions(), WORDS);
+
         el.poolInfo.textContent = `${lengths.pass.toLocaleString()} words from a ${WORDS.length.toLocaleString()}-word list`;
     } else if (currentMode === 'pattern') {
         const analysis = parsePattern(el.patternInput.value);
@@ -583,44 +571,48 @@ function getClearDelay() {
     return readIntField('custom-clear-time', 1, 86400, 60) * 1000;
 }
 
-function handleCopySuccess(copiedValue) {
+function updateCountdown() {
+    if (!clearDeadline) return;
+    const remaining = clearDeadline - Date.now();
+    if (remaining <= 0) {
+        wipeSecret();
+        showToast('Displayed credential cleared. Clipboard history is controlled by your OS.');
+        return;
+    }
+    el.clearCountdown.textContent = `Clears in ${Math.ceil(remaining / 1000)} s`;
+}
+
+function handleCopySuccess(revision, request) {
+    if (revision !== generationRevision || request !== copyRequest || !currentResult) return;
     const delay = getClearDelay();
     cancelClearTimer();
     el.copyBtn.textContent = 'Copied';
+    clearDeadline = Date.now() + delay;
+    updateCountdown();
+    countdownTimer = setInterval(updateCountdown, 250);
+    clearTimer = setTimeout(updateCountdown, delay);
     showToast(`Copied. The displayed result will clear in ${delay / 1000} seconds.`);
-
-    clearTimer = setTimeout(() => {
-        clearTimer = null;
-        el.copyBtn.textContent = 'Copy';
-        if (currentResult === copiedValue) {
-            wipeSecret();
-            showToast('Displayed credential cleared. Clipboard history is controlled by your OS.');
-        }
-    }, delay);
 }
 
 async function copyResult() {
-    if (!currentResult) {
-        showToast('Generate a credential first.');
-        return;
-    }
-
+    if (!currentResult) return;
     const value = currentResult;
+    const revision = generationRevision;
+    const request = ++copyRequest;
+    const isCurrent = () => revision === generationRevision && request === copyRequest && Boolean(currentResult);
     if (navigator.clipboard && window.isSecureContext) {
         try {
             await navigator.clipboard.writeText(value);
-            handleCopySuccess(value);
+            handleCopySuccess(revision, request);
             return;
         } catch (error) {
-            // Fall through to the legacy path for file:// and restricted browsers.
+            // A focus change or new generation must not trigger a stale fallback.
+            if (!isCurrent()) return;
         }
     }
-
-    if (fallbackCopyTextToClipboard(value)) {
-        handleCopySuccess(value);
-    } else {
-        showToast('Copy failed. Select the credential and copy it manually.');
-    }
+    if (!isCurrent()) return;
+    if (fallbackCopyTextToClipboard(value)) handleCopySuccess(revision, request);
+    else showToast('Copy failed. Select the credential and copy it manually.');
 }
 
 function toggleNestedInputs() {
@@ -708,17 +700,16 @@ function clearSavedPreferences() {
     try {
         localStorage.removeItem(STORAGE_KEYS.settings);
         localStorage.removeItem(STORAGE_KEYS.theme);
+        localStorage.removeItem(STORAGE_KEYS.profiles);
     } catch (error) {
         // Storage can be unavailable in private or locked-down contexts.
     }
 }
 
-function saveSettings() {
-    if (isParanoid()) return;
-
-    const settings = {
+function collectSettings() {
+    return {
         mode: currentMode,
-        lengths,
+        lengths: { ...lengths },
         clearTime: el.clearTime.value,
         customClearTime: el.customClearTime.value,
         bulkCount: el.bulkCount.value,
@@ -736,13 +727,21 @@ function saveSettings() {
         passNumCount: document.getElementById('pass-num-count').value,
         passSep: document.getElementById('opt-pass-sep').value,
         userNums: document.getElementById('opt-user-nums').checked,
+        userLower: document.getElementById('opt-user-lower').checked,
+        targetMaxLength: el.targetMaxLength.value,
         userNumCount: document.getElementById('user-num-count').value,
         userSep: document.getElementById('opt-user-sep').value,
         patternStr: el.patternInput.value
     };
 
+}
+
+function saveSettings() {
+    el.profileSelect.value = '';
+    updateActionAvailability();
+    if (isParanoid()) return;
     try {
-        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(collectSettings()));
     } catch (error) {
         // Settings persistence is optional.
     }
@@ -760,6 +759,14 @@ function loadSettings() {
             return;
         }
 
+        applySettings(saved);
+    } catch (error) {
+        applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        applySymbolPreset();
+    }
+}
+
+function applySettings(saved) {
         const clamp = (value, min, max, fallback) => (
             Number.isInteger(value) && value >= min && value <= max ? value : fallback
         );
@@ -788,6 +795,8 @@ function loadSettings() {
         restoreBoolean(saved, 'passNums', 'opt-pass-nums');
         restoreBoolean(saved, 'passNumsRand', 'opt-pass-nums-rand');
         restoreBoolean(saved, 'userNums', 'opt-user-nums');
+        restoreBoolean(saved, 'userLower', 'opt-user-lower');
+        el.targetMaxLength.value = saved.targetMaxLength ? readStoredNumber(saved.targetMaxLength, 1, 1000, '') : '';
 
         if (saved.passNumCount !== undefined) document.getElementById('pass-num-count').value = readStoredNumber(saved.passNumCount, 1, 10, 2);
         if (saved.userNumCount !== undefined) document.getElementById('user-num-count').value = readStoredNumber(saved.userNumCount, 1, 9, 3);
@@ -799,10 +808,6 @@ function loadSettings() {
         el.symbolPreset.value = ['default', 'friendly', 'custom'].includes(saved.symbolPreset) ? saved.symbolPreset : legacyPreset;
         if (typeof saved.symPool === 'string') el.symInput.value = normalizeSymbolPool(saved.symPool);
         applySymbolPreset();
-    } catch (error) {
-        applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        applySymbolPreset();
-    }
 }
 
 function restoreBoolean(saved, key, elementId) {
@@ -818,8 +823,97 @@ function readStoredNumber(value, min, max, fallback) {
 function checkSecureContext() {
     const available = hasSecureRandom();
     el.insecureWarning.classList.toggle('hidden', available);
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    const remoteHttp = location.protocol === 'http:' && !local;
+    document.getElementById('delivery-warning').classList.toggle('hidden', !remoteHttp);
+    document.getElementById('connection-info').textContent = location.protocol === 'file:' ? 'Connection: local file'
+        : remoteHttp ? 'Connection: unencrypted HTTP'
+        : location.protocol === 'https:' ? 'Connection: HTTPS (verify browser trust)' : 'Connection: loopback HTTP';
+    const build = globalThis.VAULT_BUILD || { version: 'unknown', commit: 'source' };
+    document.getElementById('build-info').textContent = `Version ${build.version} · ${build.commit === 'source' ? 'source checkout' : `commit ${build.commit.slice(0, 12)}`}`;
     updateActionAvailability();
     return available;
+}
+
+function renderProfiles() {
+    const group = document.getElementById('saved-profiles');
+    group.replaceChildren();
+    savedProfiles.forEach((profile, index) => {
+        const option = document.createElement('option');
+        option.value = `saved:${index}`;
+        option.textContent = profile.name;
+        group.appendChild(option);
+    });
+    updateActionAvailability();
+}
+
+function loadProfiles() {
+    if (isParanoid()) return;
+    try {
+        const value = JSON.parse(localStorage.getItem(STORAGE_KEYS.profiles));
+        savedProfiles = Array.isArray(value) ? value.filter((p) => p && typeof p.name === 'string' && p.name.trim() && p.name.length <= 40 && p.settings && typeof p.settings === 'object').slice(0, 20) : [];
+    } catch (error) { savedProfiles = []; }
+    renderProfiles();
+}
+
+function persistProfiles() {
+    if (isParanoid()) return false;
+    try {
+        localStorage.setItem(STORAGE_KEYS.profiles, JSON.stringify(savedProfiles));
+        return true;
+    } catch (error) {
+        showToast('Storage is unavailable. This preset will last only until the page closes.');
+        return false;
+    }
+}
+
+function applyProfile(value) {
+    const base = {
+        mode: 'pwd', lengths: { pwd: 24, pass: 6, user: 2 },
+        upper: true, lower: true, nums: true, syms: true, ambig: false,
+        symbolPreset: 'default', passCaps: true, passCapsRand: false,
+        passNums: false, passNumsRand: true, passNumCount: 2, passSep: '-',
+        userNums: true, userNumCount: 3, userSep: '', userLower: false,
+        targetMaxLength: '', patternStr: '[A-Z]{3}-[0-9]{4}-[a-z]{5}'
+    };
+    const presets = {
+        balanced: {}, alphanumeric: { syms: false }, friendly: { symbolPreset: 'friendly' },
+        passphrase: { mode: 'pass' }, pin: { lengths: { pwd: 6, pass: 6, user: 2 }, upper: false, lower: false, syms: false }
+    };
+    const profile = value.startsWith('saved:') ? savedProfiles[Number(value.slice(6))] : null;
+    if (!profile && !Object.hasOwn(presets, value)) return;
+    applySettings(profile ? profile.settings : { ...base, ...presets[value] });
+    updateUI();
+    saveSettings();
+    el.profileSelect.value = value;
+    el.profileName.value = profile ? profile.name : '';
+    updateActionAvailability();
+}
+
+function applyParanoidMode(active, updateAddress = true) {
+    document.getElementById('opt-paranoid').checked = active;
+    document.body.classList.toggle('paranoid-active', active);
+    el.paranoidOverlay.classList.toggle('hidden', !active);
+    cancelBulkExport();
+    closeQr();
+    if (el.csvDialog.open) el.csvDialog.close();
+    setParanoidReveal(false);
+    if (active) {
+        clearSavedPreferences();
+        savedProfiles = [];
+        renderProfiles();
+    } else {
+        saveSettings();
+    }
+    if (updateAddress) {
+        const address = new URL(location.href);
+        const params = new URLSearchParams(address.hash.slice(1));
+        if (active) params.set('paranoid', '');
+        else params.delete('paranoid');
+        address.hash = params.toString();
+        try { history.replaceState(null, '', address); } catch (error) { /* file:// history may be restricted */ }
+    }
+    updateActionAvailability();
 }
 
 function bindBoundedNumber(input, min, max, fallback) {
@@ -833,9 +927,10 @@ function bindBoundedNumber(input, min, max, fallback) {
         saveSettings();
     });
     input.addEventListener('change', () => {
+        const raw = input.value;
         const value = readIntField(input.id, min, max, fallback);
         input.value = value;
-        if (value !== lastGeneratedValue) {
+        if (String(value) !== raw || value !== lastGeneratedValue) {
             lastGeneratedValue = value;
             generate();
         }
@@ -901,6 +996,7 @@ for (const id of [
     'opt-nums',
     'opt-syms',
     'opt-ambig',
+    'opt-user-lower',
     'opt-pass-caps-rand',
     'opt-pass-nums-rand'
 ]) {
@@ -959,23 +1055,8 @@ el.bulkCount.addEventListener('change', () => {
     saveSettings();
 });
 
-document.getElementById('opt-paranoid').addEventListener('change', () => {
-    const active = isParanoid();
-    document.body.classList.toggle('paranoid-active', active);
-    el.paranoidOverlay.classList.toggle('hidden', !active);
-    setParanoidReveal(false);
-    if (active) {
-        clearSavedPreferences();
-    } else {
-        saveSettings();
-        try {
-            localStorage.setItem(STORAGE_KEYS.theme, document.body.classList.contains('dark-mode') ? 'dark' : 'light');
-        } catch (error) {
-            // Theme persistence is optional.
-        }
-    }
-    updateActionAvailability();
-});
+document.getElementById('opt-paranoid').addEventListener('change', () => applyParanoidMode(isParanoid()));
+window.addEventListener('hashchange', () => applyParanoidMode(new URLSearchParams(location.hash.slice(1)).has('paranoid'), false));
 
 el.paranoidOverlay.addEventListener('click', () => {
     setParanoidReveal(!document.body.classList.contains('paranoid-revealed'));
@@ -983,15 +1064,10 @@ el.paranoidOverlay.addEventListener('click', () => {
 
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && isParanoid()) wipeSecret();
+    else updateCountdown();
 });
-
-window.addEventListener('beforeunload', () => {
-    if (isParanoid()) {
-        wipeMemory();
-        cleanupQr();
-        clearSavedPreferences();
-    }
-});
+window.addEventListener('blur', () => { if (isParanoid()) wipeSecret(); });
+window.addEventListener('pagehide', wipeSecret);
 
 document.addEventListener('keydown', (event) => {
     if (event.code !== 'Space' || el.qrModal.open) return;
@@ -1003,6 +1079,7 @@ document.addEventListener('keydown', (event) => {
 
 el.exportCsvBtn.addEventListener('click', () => bulkExport('csv'));
 el.exportTxtBtn.addEventListener('click', () => bulkExport('txt'));
+el.exportJsonBtn.addEventListener('click', () => bulkExport('json'));
 
 el.qrBtn.addEventListener('click', () => {
     if (!currentResult) return;
@@ -1015,8 +1092,8 @@ el.qrBtn.addEventListener('click', () => {
     try {
         new QRCode(el.qrContainer, {
             text: currentResult,
-            width: 220,
-            height: 220,
+            width: 210,
+            height: 210,
             colorDark: '#000000',
             colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.M
@@ -1044,7 +1121,56 @@ el.resetSettingsBtn.addEventListener('click', () => {
     window.location.reload();
 });
 
-loadSettings();
+
+el.clearBtn.addEventListener('click', () => { wipeSecret(); showToast('Displayed credential cleared.'); });
+document.getElementById('bulk-cancel-btn').addEventListener('click', () => { cancelBulkExport(); showToast('Export cancelled. No file was downloaded.'); });
+el.csvAck.addEventListener('change', () => { el.csvConfirm.disabled = !el.csvAck.checked; });
+el.csvConfirm.addEventListener('click', () => {
+    if (!el.csvAck.checked) return;
+    el.csvDialog.close();
+    bulkExport('csv', true);
+});
+document.getElementById('csv-export-cancel').addEventListener('click', () => el.csvDialog.close());
+el.targetMaxLength.addEventListener('change', () => {
+    if (el.targetMaxLength.value) el.targetMaxLength.value = readIntField('target-max-length', 1, 1000, '');
+    updateCompatibility();
+    saveSettings();
+});
+el.profileSelect.addEventListener('change', () => applyProfile(el.profileSelect.value));
+el.profileSave.addEventListener('click', () => {
+    if (isParanoid()) return;
+    const name = el.profileName.value.trim().slice(0, 40);
+    if (!name) { showToast('Enter a preset name.'); el.profileName.focus(); return; }
+    let index = savedProfiles.findIndex((p) => p.name === name);
+    if (index === -1) {
+        if (savedProfiles.length >= 20) { showToast('Delete a preset before adding another (maximum 20).'); return; }
+        index = savedProfiles.length;
+    }
+    savedProfiles[index] = { name, settings: collectSettings() };
+    const persisted = persistProfiles();
+    renderProfiles();
+    el.profileSelect.value = `saved:${index}`;
+    updateActionAvailability();
+    if (persisted) showToast('Preset saved on this device.');
+});
+el.profileDelete.addEventListener('click', () => {
+    if (isParanoid() || !el.profileSelect.value.startsWith('saved:')) return;
+    savedProfiles.splice(Number(el.profileSelect.value.slice(6)), 1);
+    persistProfiles();
+    renderProfiles();
+    el.profileName.value = '';
+    showToast('Preset removed.');
+});
+
+const privateLaunch = new URLSearchParams(location.hash.slice(1)).has('paranoid');
+if (privateLaunch) {
+    applyParanoidMode(true, false);
+    applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    applySymbolPreset();
+} else {
+    loadSettings();
+    loadProfiles();
+}
 updateUI(false);
 if (checkSecureContext()) generate();
 else resetMetrics();

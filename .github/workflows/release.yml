@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: ['version.js']
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/tests.yml
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Build versioned offline archive and checksums
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
+          python3 scripts/build-release.py --version "$version" --commit "$(git rev-parse HEAD)" --output dist
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
+          tag="v$version"
+          gh release create "$tag" --target "$(git rev-parse HEAD)" --draft \
+            --title "Homelab Vault $tag" --notes-file CHANGELOG.md
+          gh release upload "$tag" dist/*
+          gh release edit "$tag" --draft=false --latest

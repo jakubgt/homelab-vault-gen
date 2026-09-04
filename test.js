@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 const {
     CHARS,
     DEFAULT_SYMS,
@@ -184,6 +185,12 @@ const caddy = read('Caddyfile');
 const compose = read('docker-compose.yml');
 const readme = read('README.md');
 const installer = read('install-caddy-lxc.sh');
+const packageInfo = JSON.parse(read('package.json'));
+const dependabot = read('.github/dependabot.yml');
+const versionContext = vm.createContext({});
+vm.runInContext(read('version.js'), versionContext, { timeout: 1000, filename: 'version.js' });
+const build = versionContext.VAULT_BUILD;
+const runtimeScripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
 const activeCaddy = caddy
     .split(/\r?\n/)
     .filter((line) => !/^\s*#/.test(line))
@@ -195,7 +202,16 @@ const renderedCaddy = caddy
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
 check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
 check('shared production core loads before app.js', html.indexOf('core.js') > -1 && html.indexOf('core.js') < html.indexOf('app.js'));
-check('Docker serves the shared production core', compose.includes('./core.js:'));
+check('Docker serves every HTML script through a read-only mount', runtimeScripts.length > 0 && runtimeScripts.every((asset) => compose.includes(`./${asset}:/usr/share/nginx/html/${asset}:ro`)));
+check('build metadata loads before app.js', runtimeScripts.indexOf('version.js') >= 0 && runtimeScripts.indexOf('version.js') < runtimeScripts.indexOf('app.js'));
+check('build metadata matches the package release version', Boolean(build) && build.version === packageInfo.version);
+check('build metadata identifies a source checkout or one full commit', Boolean(build) && /^(?:source|[0-9a-f]{40})$/.test(build.commit));
+check('build metadata cannot be mutated accidentally', Boolean(build) && Object.isFrozen(build));
+const installerVersion = installer.match(/^RELEASE_VERSION=["']([^"']+)["']\s*$/m)?.[1];
+check('installer and browser identify the same release version', installerVersion === packageInfo.version);
+check('Docker deployment includes application and third-party licenses', ['LICENSE', 'THIRD_PARTY_NOTICES.md'].every((asset) => compose.includes(`./${asset}:/usr/share/nginx/html/${asset}:ro`)));
+check('Docker healthcheck matches the IPv4 NGINX listener', compose.includes('http://127.0.0.1:8080/') && /^\s*listen 8080;/m.test(nginx));
+check('Dependabot uses the Compose ecosystem for its interpolated image default', /^\s*- package-ecosystem: docker-compose\s*$/m.test(dependabot));
 check('Paranoid Mode never clears unrelated origin storage', !app.includes('localStorage.clear'));
 check('QR cleanup removes the library title copy', app.includes("removeAttribute('title')"));
 check('served CSP does not allow unsafe inline code', !nginx.includes("'unsafe-inline'") && !caddy.includes("'unsafe-inline'"));
@@ -214,7 +230,8 @@ check(
         (renderedCaddy.match(/^https:\/\/192\.0\.2\.1\s*\{/gm) || []).length === 1
 );
 check('Caddy skips automatic host trust-store changes', /^\s*skip_install_trust\s*$/m.test(activeCaddy));
-check('Caddy hides the installer ownership marker', /^\s*hide \.homelab-vault-managed\s*$/m.test(activeCaddy));
+const caddyHiddenFiles = [...activeCaddy.matchAll(/^\s*hide\s+([^\n]+)/gm)].flatMap((match) => match[1].trim().split(/\s+/));
+check('Caddy hides ownership and deployment metadata', ['.homelab-vault-managed', '.homelab-vault-deployment'].every((file) => caddyHiddenFiles.includes(file)));
 check(
     'Caddy leaves localhost and vault.lan alternatives disabled',
     !/^localhost\s*\{/m.test(activeCaddy) && !/^https:\/\/vault\.lan\s*\{/m.test(activeCaddy)
@@ -253,10 +270,23 @@ check(
         !installer.includes('/root.key')
 );
 check(
-    'installer stages site updates and installs a current-version updater',
+    'installer stages version metadata and license files with the runtime assets',
     installer.includes('/srv/.homelab-vault.new.XXXXXX') &&
-        installer.includes('SITE_MUTATION_BEGUN=1') &&
-        installer.includes('https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/install-caddy-lxc.sh')
+        ['LICENSE', 'THIRD_PARTY_NOTICES.md'].every((asset) => installer.includes('"${SOURCE_DIR}/' + asset + '"')) &&
+        installer.includes('"${SITE_STAGE}/version.js"') &&
+        installer.includes('"${SITE_STAGE}/${DEPLOYMENT_FILE}"')
+);
+check(
+    'installer compares itself with the selected source commit before staging',
+    installer.includes('fetch_revision "$SOURCE_DIR" "$DEPLOY_COMMIT"') &&
+        installer.includes('cmp -s "$0" "${SOURCE_DIR}/install-caddy-lxc.sh"') &&
+        !installer.includes('raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/')
+);
+check(
+    'installer acquires its protected lock before inspecting deployment state',
+    installer.includes('LOCK_FILE="/run/homelab-vault/install.lock"') &&
+        installer.indexOf('\nacquire_install_lock\n') > -1 &&
+        installer.indexOf('\nacquire_install_lock\n') < installer.indexOf('\nif dpkg-query')
 );
 
 console.log(`\n${'-'.repeat(58)}`);

@@ -5,35 +5,90 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Check syntax and core behavior
+        run: |
+          node --check core.js
+          node --check app.js
+          node --check version.js
+          npm test
+      - name: Verify release packaging
+        run: python3 tests/test-release.py
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:browser -- --project=${{ matrix.browser }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure()
+        with:
+          name: browser-failure-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  deployment:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-
-      - name: Check JavaScript syntax
-        run: node --check core.js && node --check app.js && node --check test.js
-
-      - name: Check Debian LXC installer
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Check installer and exercise rollback
         run: |
           test -x install-caddy-lxc.sh
           dash -n install-caddy-lxc.sh
-
-      - name: Run test suite
-        run: node test.js
-
-      - name: Validate Compose configuration
-        run: docker compose config --quiet
+          dash -n tests/test-installer.sh
+          dash tests/test-installer.sh
+          shellcheck install-caddy-lxc.sh
+      - name: Start hardened container and verify delivery
+        run: |
+          docker compose config --quiet
+          docker compose up -d --wait --wait-timeout 90
+          curl --fail --silent --show-error --dump-header /tmp/vault-headers http://127.0.0.1:8080/ --output /tmp/vault-index
+          grep -qi "content-security-policy:.*default-src 'none'" /tmp/vault-headers
+          grep -qi 'cache-control:.*no-store' /tmp/vault-headers
+          grep -qi 'x-frame-options: DENY' /tmp/vault-headers
+          for asset in core.js app.js version.js words.js qrcode.min.js styles.css LICENSE THIRD_PARTY_NOTICES.md; do
+            curl --fail --silent --show-error "http://127.0.0.1:8080/$asset" --output /dev/null
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/.git/config)" = 403
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q vault-gen)")" = healthy
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker compose logs
+          docker compose down
