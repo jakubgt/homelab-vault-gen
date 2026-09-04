@@ -34,7 +34,7 @@
 # localhost {
 #     root * /srv/homelab-vault
 #     file_server {
-#         hide .homelab-vault-managed
+#         hide .homelab-vault-managed .homelab-vault-deployment
 #     }
 #     encode zstd gzip
 #     import security_headers
@@ -57,7 +57,7 @@ https://<LXC_IPV4> {
 	tls internal
 	root * /srv/homelab-vault
 	file_server {
-		hide .homelab-vault-managed
+		hide .homelab-vault-managed .homelab-vault-deployment
 	}
 	encode zstd gzip
 	import security_headers
@@ -69,7 +69,7 @@ https://<LXC_IPV4> {
 # vault.example.com {
 #     root * /srv/homelab-vault
 #     file_server {
-#         hide .homelab-vault-managed
+#         hide .homelab-vault-managed .homelab-vault-deployment
 #     }
 #     encode zstd gzip
 #     import security_headers

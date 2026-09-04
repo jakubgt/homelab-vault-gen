@@ -5,7 +5,12 @@ updates:
     schedule:
       interval: monthly
 
-  - package-ecosystem: docker
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: npm
     directory: /
     schedule:
       interval: monthly

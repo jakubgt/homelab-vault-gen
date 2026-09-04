@@ -254,20 +254,21 @@ code {
     font-weight: 650;
 }
 
-.paranoid-active #result {
-    filter: blur(9px);
-    opacity: 0.38;
+.paranoid-active #result.concealed {
+    color: var(--muted);
+    font-family: inherit;
+    padding-bottom: 60px;
     user-select: none;
 }
 
 .paranoid-active.paranoid-revealed #result {
-    filter: none;
-    opacity: 1;
+    padding-top: 48px;
     user-select: all;
 }
 
 .reveal-btn {
     position: absolute;
+    bottom: 8px;
     min-width: 88px;
     min-height: 40px;
     padding: 7px 14px;
@@ -281,6 +282,7 @@ code {
 
 .paranoid-revealed .reveal-btn {
     top: 7px;
+    bottom: auto;
     right: 7px;
     min-width: auto;
     min-height: 34px;
@@ -501,6 +503,29 @@ input[type="checkbox"] {
     font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
+.allowed-characters summary {
+    min-height: 28px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.allowed-characters[open] summary {
+    margin-bottom: 8px;
+}
+
+#allowed-character-preview {
+    display: block;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    font-size: 0.82rem;
+    user-select: all;
+}
+
 .amount-row,
 .label-row,
 .setting-row {
@@ -703,10 +728,46 @@ kbd {
     width: fit-content;
     max-width: 100%;
     margin: 0 auto;
-    padding: 10px;
-    border-radius: 8px;
+    padding: 40px;
+    border-radius: 0;
     background: #ffffff;
 }
+
+.result-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 8px;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.preset-panel, .about-panel {
+    margin: 14px 0;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.85rem;
+}
+
+.preset-panel summary, .about-panel summary { font-weight: 650; }
+.preset-panel[open] summary, .about-panel[open] summary { margin-bottom: 12px; }
+.preset-panel input, .preset-panel select { min-width: 0; max-width: 100%; }
+.preset-panel .setting-row { flex-wrap: wrap; }
+.preset-panel .metric-note { margin-bottom: 0; }
+.text-link { color: var(--accent); overflow-wrap: anywhere; }
+.text-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.about-panel p:last-child { margin-bottom: 0; }
+#bulk-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#bulk-progress { width: 100%; }
+#csv-export-dialog { max-width: min(480px, calc(100% - 24px)); padding: 0; border: 0; background: transparent; color: var(--text); }
+#csv-export-dialog::backdrop { background: rgba(5, 10, 18, 0.78); }
+#csv-export-dialog .qr-content { text-align: left; }
+#csv-export-dialog .setting-row { margin-top: 16px; flex-wrap: wrap; }
+#csv-export-dialog .action-btn { flex: 1 1 120px; }
+#compatibility-warning { font-weight: 500; }
 
 #qr-container canvas,
 #qr-container img,

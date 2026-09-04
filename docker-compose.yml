@@ -18,10 +18,13 @@ services:
       - ./app.js:/usr/share/nginx/html/app.js:ro
       - ./words.js:/usr/share/nginx/html/words.js:ro
       - ./qrcode.min.js:/usr/share/nginx/html/qrcode.min.js:ro
+      - ./version.js:/usr/share/nginx/html/version.js:ro
+      - ./LICENSE:/usr/share/nginx/html/LICENSE:ro
+      - ./THIRD_PARTY_NOTICES.md:/usr/share/nginx/html/THIRD_PARTY_NOTICES.md:ro
       - ./assets:/usr/share/nginx/html/assets:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3

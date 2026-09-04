@@ -1,1 +1,17 @@
+* text=auto
+.gitattributes text eol=lf
+.gitignore text eol=lf
 *.sh text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+Caddyfile text eol=lf
+nginx.conf text eol=lf
+LICENSE text eol=lf
+*.png binary
+*.ico binary
+*.zip binary

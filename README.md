@@ -16,8 +16,10 @@ An offline-first password, passphrase, username, and pattern generator for homel
 - Exact password entropy for the class-constrained output space, plus conservative passphrase and pattern estimates.
 - The full 7,776-word EFF large wordlist for passphrases and usernames.
 - Printable-ASCII pattern templates such as `[A-Z]{3}-[0-9]{4}`.
-- Local QR rendering and bulk TXT/CSV export with no upload.
-- Paranoid Mode that stops preference persistence, hides the result, clears it when the tab loses focus, and disables file export.
+- Local QR rendering with generous white margins and cancellable bulk TXT/JSON/CSV export with no upload.
+- Paranoid Mode that conceals plaintext from both the display and accessibility tree, clears on focus loss, and disables file export and preference saving.
+- Clear now, a post-copy countdown, output length checks, lowercase usernames, and built-in or named generation presets.
+- A `#paranoid` launch address that activates privacy controls before the first generation and keeps them active after reload.
 - Responsive light/dark UI, keyboard-accessible tabs, reduced-motion support, and screen-reader labels.
 - Hardened NGINX and Caddy examples with a strict Content Security Policy.
 
@@ -26,15 +28,27 @@ An offline-first password, passphrase, username, and pattern generator for homel
 1. Pick Password, Passphrase, Username, or Pattern.
 2. Adjust the options. Each generation setting immediately creates one new value.
 3. Select **Generate** for another value, **Copy** for the clipboard, or **Show QR** for local transfer.
-4. The displayed result clears after the selected post-copy delay. The app cannot erase OS clipboard history.
+4. Use **Clear now** whenever you finish. After copying, a countdown shows when the displayed result will clear. The app cannot erase OS clipboard history.
 
-Press <kbd>Space</kbd> outside a form control to generate again. The selected mode and preferences are stored in `localStorage` unless Paranoid Mode is active; generated credentials are never intentionally stored there.
+Press <kbd>Space</kbd> outside a form control to generate again. The selected mode, preferences, and named presets are stored in this app's `localStorage` keys unless Paranoid Mode is active. Generated results are not saved there. **Pattern literals are settings:** never enter an existing secret in a pattern. Enabling Paranoid Mode removes this app's saved settings, theme, and presets while preserving unrelated origin storage.
+
+**Generation presets** includes strong passwords, alphanumeric, config-friendly, six-word passphrases, and six-digit PINs. A PIN has much less entropy than the password/passphrase defaults; use it only where a target requires a PIN and limits guessing. You can save up to 20 named presets; saving the same name replaces that preset. Presets save settings, not a generated result.
+
+**Target length limit** is an advisory compatibility check. It does not truncate, reject, or filter random outputs, so the generator's distribution is preserved. Adjust the generation options if the result is too long for the target. Password mode's pool preview and Pattern mode's output length describe the selected constraints.
+
+**Start in Paranoid mode** adds `#paranoid` to the address. Bookmark that address for future private starts. The mode uses the URL fragment, not a stored preference, and conceals each new result until you select Reveal. Moving focus to another window, hiding the tab, or leaving the page clears the result and QR. Browser clipboard permission dialogs can also cause focus loss; generate again after granting access if needed.
+
+**Bulk export:** TXT contains one exact credential per line; JSON contains an array of exact strings. Both are unencrypted. CSV keeps the original values, but spreadsheet applications can interpret formulas, strip leading zeros, or round digits. CSV export requires acknowledgement that you will import the `Credential` column as **Text**. Do not open it directly as a spreadsheet; prefer TXT/JSON for interchange. No apostrophes or tabs are silently added to credentials. The progress indicator and Cancel export button remain responsive during generation.
+
+**About & status** shows the app version, deployed source commit when available, delivery method, and licenses. It makes no network request to check for updates. Remote HTTP shows a warning; use trusted HTTPS for access from another device.
 
 ## Quick start
 
 ### Open the file locally
 
-Download or clone the repository, then open `index.html` in a current browser. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails.
+Download `homelab-vault-gen-v2.2.0.zip` from [the v2.2.0 release](https://github.com/jakubgt/homelab-vault-gen/releases/tag/v2.2.0), verify it against the release's `SHA256SUMS`, extract it, and open `index.html` in a current browser. The ZIP includes all runtime assets and records its source commit. No npm install or build is required to run it. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails.
+
+You can also clone the repository and open `index.html`. A source checkout displays its version with “source checkout”; packaged and LXC installations display a commit. Checksums detect accidental corruption; obtain the checksum and release through a trusted GitHub connection.
 
 ### Loopback development server
 
@@ -95,14 +109,16 @@ apt-get update
 apt-get install -y ca-certificates curl
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
   --output /root/install-homelab-vault.sh \
-  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/main/install-caddy-lxc.sh
+  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.2.0/install-caddy-lxc.sh
 chmod 0700 /root/install-homelab-vault.sh
 /root/install-homelab-vault.sh
 ```
 
 The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
 
-It then installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), downloads Homelab Vault, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site and Caddy configuration if startup fails.
+It then installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), resolves v2.2.0 to a full commit, checks that its installer matches that revision, downloads the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
+
+This command also migrates an installation made with the older updater. Download and run the versioned installer once to install the new update commands. An old `/opt` source checkout is left untouched; the new updater uses a temporary checkout.
 
 ### 2. Allow LAN access
 
@@ -160,13 +176,17 @@ The original CA remains protected under `/var/lib/caddy`. Keep that directory in
 
 ### 4. Update or change the IP
 
-The installer creates one update command. Run it as `root` whenever the repository changes or the LXC gets a new reserved address:
+The installer installs one maintenance command. Run these as `root` in the LXC:
 
 ```bash
+homelab-vault-update status
+homelab-vault-update check-update
 homelab-vault-update
 ```
 
-Enter the current LXC IPv4 address when prompted. The updater downloads the current installer, uses a fast-forward-only Git pull, stages the explicit runtime files, revalidates Caddy, and keeps the existing CA.
+`status` shows the installed version, full commit, IP, and Caddy state. `check-update` reads stable `vX.Y.Z` tags and reports whether the highest version differs, without changing the deployment. With no arguments, the updater selects that latest stable tag, resolves it once, and runs that commit's installer against the same commit's assets. Tags and the GitHub repository remain part of the delivery trust model; commit consistency is not a separate signature guarantee.
+
+To select a reviewed version explicitly, use `homelab-vault-update v2.2.0` or `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`. The chosen revision must support the pinned installer protocol (v2.2.0 onward). Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
 
 ### Troubleshooting
 
@@ -220,16 +240,35 @@ Patterns accept printable ASCII, up to 512 input characters and 1,000 output cha
 
 ## Tests
 
-Requires Node.js 20 or newer; there are no packages to install.
+The app itself has no package installation or build step. Core/repository tests require Node.js 22 or newer and no installed dependencies:
 
 ```bash
 node --check core.js
 node --check app.js
 node --check test.js
 node test.js
+node test-core.cjs
 ```
 
-The suite checks the random-integer and generation guarantees, entropy calculations, pattern parsing, audited wordlist, security headers, browser integration, and deployment templates. GitHub Actions also checks the Debian installer syntax and executable bit and validates the Compose file. Dependabot is configured for monthly GitHub Actions and Docker dependency checks.
+For behavioral browser tests, install development-only tools and browser binaries:
+
+```bash
+npm ci
+npx playwright install --with-deps
+npm run test:all
+```
+
+Playwright covers Chromium, Firefox, and WebKit using a loopback test server with the production NGINX headers. The tests exercise concealment/accessibility, focus and page lifecycle, clipboard races and failure paths, countdowns, settings, presets, exact export bytes, cancellation, and QR decoding. Only disposable sample values are used. The older repository integration assertions check static configuration; they complement these behavioral tests.
+
+On Linux, run the installer harness and release tests with:
+
+```bash
+dash -n install-caddy-lxc.sh
+dash tests/test-installer.sh
+python3 tests/test-release.py
+```
+
+The shell harness exercises actual temporary-directory rollback and mocks service/package actions. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, and deterministic release packaging. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A tagged release or a version.js change on main runs the full suite before publication.
 
 For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image pinned by a multi-platform digest (`nginxinc/nginx-unprivileged@sha256:...`) after verifying that digest in your registry.
 
@@ -238,13 +277,20 @@ For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image
 | Path | Purpose |
 |---|---|
 | `index.html`, `styles.css`, `app.js` | Accessible browser UI and state handling |
-| `core.js` | Shared RNG, password, entropy, symbol, and pattern logic |
+| `core.js` | Shared RNG, all credential generators, entropy, symbols, and pattern parsing |
+| `version.js` | Local version/source metadata; populated with a commit during packaging/deployment |
 | `words.js` | Vendored EFF large wordlist |
 | `qrcode.min.js` | Vendored local QR renderer |
 | `docker-compose.yml`, `nginx.conf` | Unprivileged container deployment |
 | `Caddyfile` | Required-IP LAN HTTPS template and deployment alternatives |
 | `install-caddy-lxc.sh` | Guided Debian LXC installation and update script |
-| `test.js` | Zero-dependency production-core and integration tests |
+| `test.js`, `test-core.cjs` | Zero-dependency core and repository checks |
+| `tests/browser.spec.js`, `playwright.config.js` | Browser regressions and engine matrix |
+| `tests/test-installer.sh`, `tests/test-release.py` | Rollback and release packaging tests |
+| `scripts/build-release.py` | Deterministic offline ZIP and checksum/manifest builder |
+| `CHANGELOG.md` | Release notes and migration information |
+
+To build a release locally, run `python3 scripts/build-release.py --version 2.2.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist` from a clean checkout of that commit. Version declarations must agree. The release workflow validates the revision, builds the offline archive and checksums, then publishes the GitHub release. See [CHANGELOG.md](CHANGELOG.md) for v2.2.0 changes.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, digest, and license information for vendored assets, and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

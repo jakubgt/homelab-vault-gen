@@ -39,13 +39,40 @@
             This browser does not expose <code>crypto.getRandomValues</code>, so generation has been disabled. Use a current version of Chrome, Edge, Firefox, or Safari.
         </div>
 
+        <div id="delivery-warning" class="warning-banner hidden" role="alert">This page was delivered over unencrypted HTTP. Use trusted HTTPS before generating credentials on another device.</div>
+
+        <details class="preset-panel">
+            <summary>Generation presets</summary>
+            <label for="profile-select">Preset</label>
+            <select id="profile-select" class="full-width-input">
+                <option value="">Custom settings</option>
+                <optgroup label="Built-in" id="builtin-profiles">
+                    <option value="balanced">Strong password · 24 characters</option>
+                    <option value="alphanumeric">Alphanumeric · 24 characters</option>
+                    <option value="friendly">Config-friendly · 24 characters</option>
+                    <option value="passphrase">Readable passphrase · 6 words</option>
+                    <option value="pin">Numeric PIN · 6 digits</option>
+                </optgroup>
+                <optgroup label="Saved on this device" id="saved-profiles"></optgroup>
+            </select>
+            <div class="setting-row">
+                <label for="profile-name">Save as</label>
+                <input id="profile-name" type="text" maxlength="40" placeholder="Preset name" autocomplete="off">
+                <button id="profile-save-btn" class="secondary-btn bulk-btn" type="button">Save preset</button>
+                <button id="profile-delete-btn" class="text-btn" type="button" disabled>Delete preset</button>
+            </div>
+            <p class="metric-note">Saves settings, including pattern literals, on this device. Never put an existing secret in a pattern. Saved presets are removed when Paranoid mode is enabled.</p>
+        </details>
+
         <section class="result-section" aria-labelledby="result-heading">
             <h2 id="result-heading" class="visually-hidden">Generated credential</h2>
             <div id="result-container">
-                <output id="result" aria-label="Generated credential"></output>
+                <output id="result" aria-label="Generated credential" aria-live="off"></output>
                 <button type="button" id="paranoid-overlay" class="reveal-btn hidden" aria-pressed="false">Reveal</button>
             </div>
             <p id="generation-error" class="generation-error hidden" role="alert"></p>
+            <div class="result-status"><span id="output-length">No credential</span><span id="clear-countdown" aria-live="off"></span><button type="button" id="clear-btn" class="text-btn" disabled>Clear now</button></div>
+            <p id="compatibility-warning" class="generation-error hidden" role="status"></p>
         </section>
 
         <section id="metrics-container" aria-label="Credential strength estimate">
@@ -90,6 +117,12 @@
                     <label for="sym-input" class="visually-hidden">Custom symbols</label>
                     <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&amp;*()-_=+[]{};:,.&lt;&gt;/?|~" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
                 </div>
+
+                <details id="allowed-characters" class="full-width-opt allowed-characters">
+                    <summary>Allowed characters <span id="allowed-character-count"></span></summary>
+                    <code id="allowed-character-preview" aria-live="polite" aria-atomic="true"></code>
+                    <p class="opt-desc no-indent">Reflects selected character sets and ambiguous-character exclusions.</p>
+                </details>
             </section>
 
             <section id="pattern-options" class="options-grid" role="tabpanel" aria-labelledby="tab-pattern" hidden>
@@ -142,6 +175,7 @@
             </section>
 
             <section id="user-options" class="options-grid" role="tabpanel" aria-labelledby="tab-user" hidden>
+                <label class="full-width-opt"><input type="checkbox" id="opt-user-lower"> Lowercase username</label>
                 <div class="opt-col">
                     <div>
                         <label><input type="checkbox" id="opt-user-nums" checked> Append numbers</label>
@@ -170,7 +204,15 @@
                 <div class="full-width-opt">
                     <label><input type="checkbox" id="opt-paranoid"> Paranoid mode</label>
                     <div class="opt-desc">Stops preference saving, hides the result, clears it when this tab loses focus, and disables file export.</div>
+                    <a id="paranoid-launch" class="text-link" href="#paranoid">Start in Paranoid mode</a>
+                    <div class="opt-desc">The address keeps this mode active after reload. Bookmark it for private starts.</div>
                 </div>
+
+                <div class="setting-row">
+                    <label for="target-max-length">Target length limit</label>
+                    <input type="number" id="target-max-length" min="1" max="1000" class="num-clear" placeholder="None" inputmode="numeric" autocomplete="off">
+                </div>
+                <p class="metric-note">Compatibility check only: reports values that exceed your target's limit. Never truncates or filters generated credentials.</p>
 
                 <div class="setting-row">
                     <label for="clear-time">Clear after copy</label>
@@ -186,13 +228,15 @@
 
                 <details class="export-panel">
                     <summary>Bulk export</summary>
-                    <p>Downloads credentials as plaintext. Files are disabled in Paranoid mode.</p>
+                    <p>Downloads unencrypted credentials. TXT and JSON preserve exact values. Files are disabled in Paranoid mode.</p>
                     <div class="setting-row export-row">
                         <label for="bulk-count">Count</label>
                         <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50" inputmode="numeric" autocomplete="off">
                         <button type="button" class="secondary-btn bulk-btn" id="export-csv-btn" disabled>CSV</button>
                         <button type="button" class="secondary-btn bulk-btn" id="export-txt-btn" disabled>TXT</button>
+                        <button type="button" class="secondary-btn bulk-btn" id="export-json-btn" disabled>JSON</button>
                     </div>
+                    <div id="bulk-status" class="hidden" role="status"><progress id="bulk-progress" max="100" value="0" aria-label="Bulk generation progress"></progress><span id="bulk-progress-text"></span><button type="button" id="bulk-cancel-btn" class="text-btn">Cancel export</button></div>
                 </details>
 
                 <button type="button" id="reset-settings-btn" class="text-btn">Reset saved preferences</button>
@@ -206,6 +250,12 @@
         </div>
 
         <p class="shortcut-hint">Tip: press <kbd>Space</kbd> outside a control to generate again.</p>
+        <details class="about-panel">
+            <summary>About &amp; status</summary>
+            <p id="build-info"></p><p id="connection-info"></p>
+            <p>Generated credentials stay in this browser until you copy, scan, or export them. No telemetry or automatic update requests.</p>
+            <p><a href="LICENSE" class="text-link">License</a> · <a href="THIRD_PARTY_NOTICES.md" class="text-link">Third-party notices</a></p>
+        </details>
     </main>
 
     <dialog id="qr-modal" aria-labelledby="qr-title" aria-describedby="qr-description">
@@ -217,8 +267,18 @@
         </div>
     </dialog>
 
+    <dialog id="csv-export-dialog" aria-labelledby="csv-title" aria-describedby="csv-description">
+        <div class="qr-content">
+            <h2 id="csv-title">Import CSV credentials as text</h2>
+            <p id="csv-description">Opening CSV directly in a spreadsheet can execute formulas, remove leading zeros, or round digits. Import the Credential column explicitly as Text. Use TXT or JSON for exact-value interchange.</p>
+            <label><input id="csv-text-ack" type="checkbox"> I will import the Credential column as text.</label>
+            <div class="setting-row"><button type="button" id="csv-export-confirm" class="action-btn" disabled>Export CSV</button><button type="button" id="csv-export-cancel" class="secondary-btn action-btn">Cancel</button></div>
+        </div>
+    </dialog>
+
     <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+    <script src="version.js"></script>
     <script src="qrcode.min.js"></script>
     <script src="words.js"></script>
     <script src="core.js"></script>
