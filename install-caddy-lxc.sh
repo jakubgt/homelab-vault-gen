@@ -278,8 +278,9 @@ bootstrap_update() (
 activate_site() {
     if [ -d "$WEB_ROOT" ]; then
         SITE_BACKUP="${SITE_PARENT}/.homelab-vault.previous.$$"
-        [ ! -e "$SITE_BACKUP" ] && [ ! -L "$SITE_BACKUP" ] \
-            || die "Temporary backup path already exists: ${SITE_BACKUP}"
+        if [ -e "$SITE_BACKUP" ] || [ -L "$SITE_BACKUP" ]; then
+            die "Temporary backup path already exists: ${SITE_BACKUP}"
+        fi
     fi
     SITE_MUTATION_BEGUN=1
     [ -z "$SITE_BACKUP" ] || mv -- "$WEB_ROOT" "$SITE_BACKUP"
@@ -290,8 +291,9 @@ activate_site() {
 acquire_install_lock() {
     command -v flock >/dev/null 2>&1 || die "Install Debian's util-linux package (flock is required)."
     lock_directory=${LOCK_FILE%/*}
-    [ ! -L "$lock_directory" ] && [ ! -L "$LOCK_FILE" ] \
-        || die "Refusing a symbolic link in the installer lock path."
+    if [ -L "$lock_directory" ] || [ -L "$LOCK_FILE" ]; then
+        die "Refusing a symbolic link in the installer lock path."
+    fi
     # /run is root-owned. Keep the lock outside world-writable /run/lock so an
     # unprivileged user cannot pre-create a lockfile or redirect a root write.
     install -d -m 0700 "$lock_directory"
@@ -437,8 +439,9 @@ for required_file in \
     assets/vault-icon.png \
     install-caddy-lxc.sh
 do
-    [ -f "${SOURCE_DIR}/${required_file}" ] && [ ! -L "${SOURCE_DIR}/${required_file}" ] \
-        || die "The selected revision is missing a regular ${required_file}."
+    if [ ! -f "${SOURCE_DIR}/${required_file}" ] || [ -L "${SOURCE_DIR}/${required_file}" ]; then
+        die "The selected revision is missing a regular ${required_file}."
+    fi
 done
 
 say "Choose this LXC's stable IPv4 address"
