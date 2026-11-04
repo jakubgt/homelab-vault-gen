@@ -4,6 +4,7 @@ const { test: base, expect } = require('@playwright/test');
 const jsQR = require('jsqr');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { version } = require('../package.json');
 
 // These tests load the production application under its deployed CSP. Clipboard
 // promises are controlled without reading or changing the user's OS clipboard.
@@ -503,7 +504,7 @@ test('320px layout keeps all modes, expanded settings and the QR inside the view
 test('About shows build and connection status with working local license links', async ({ page }) => {
     await page.goto('/');
     await page.locator('.about-panel > summary').click();
-    await expect(page.locator('#build-info')).toContainText('Version 2.2.0');
+    await expect(page.locator('#build-info')).toContainText(`Version ${version}`);
     await expect(page.locator('#connection-info')).toHaveText('Connection: loopback HTTP');
     await expect(page.locator('#delivery-warning')).toBeHidden();
     for (const [name, filename, expectedContent] of [

@@ -27,6 +27,8 @@ RELEASE_FILES = (
     "assets/vault-icon.png",
     "core.js",
     "docker-compose.yml",
+    "docs/RELEASING.md",
+    "docs/screenshots/homelab-vault.png",
     "index.html",
     "install-caddy-lxc.sh",
     "nginx.conf",
@@ -35,7 +37,7 @@ RELEASE_FILES = (
     "version.js",
     "words.js",
 )
-BINARY_FILES = frozenset({"assets/vault-icon.png"})
+BINARY_FILES = frozenset({"assets/vault-icon.png", "docs/screenshots/homelab-vault.png"})
 ARCHIVE_MANIFEST = "RELEASE-MANIFEST.json"
 FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 

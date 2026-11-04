@@ -1,3 +1,33 @@
+# v2.2.1 — Release and updater trust
+
+This security maintenance release makes publication an explicit owner action and prevents the updater from executing installers selected through unreviewed or mutable tags.
+
+## Security and deployment
+
+- Default and version-tag updates require published stable immutable GitHub releases. Bare tags, drafts, prereleases, mutable releases, malformed metadata, and API failures stop the update.
+- The updater verifies that main is protected and that the exact candidate commit is in its first-parent history before checkout or execution. A moving main tip causes a retry failure; installer and assets stay pinned to one verified commit.
+- Installer protocol 2 prevents the hardened updater from executing older installers that restore raw-tag selection. Explicit full-SHA selection remains available only for reviewed main-history protocol 2 revisions.
+- GitHub Actions now tests and prepares artifacts with read-only repository permissions. Tag events cannot initiate publication. The owner publishes manually through a command that verifies repository identity, current protected main, successful CI, tag policies, immutable releases, and deterministic artifacts.
+- Added two GitHub tag-ruleset configurations: administrator-only version-tag creation, and no-bypass version-tag update/deletion restrictions. A separate owner-only helper checks remote settings by default and applies missing protections only with `--apply`. It preserves existing branch rules and refuses to overwrite conflicting policies.
+- Updated the Docker default from NGINX 1.30.4-alpine to 1.31.7-alpine. `VAULT_IMAGE` overrides remain supported.
+
+## Documentation and verification
+
+- Added the app screenshot, with disposable demo output, to the repository, README, and offline archive.
+- Added the owner release guide, explicit trust boundaries, and migration instructions.
+- Added regression coverage for malicious orphan tags, off-main/side-parent commits, protected-main/API failures, mutable-release rejection, old-protocol rejection, manual publication, and remote security-configuration guards.
+
+## Upgrade notes
+
+- **Existing v2.2.0 installations require one direct download/run of the v2.2.1 installer from the README.** The old maintenance command rejects protocol 2, so it cannot perform that one-time migration. The installer retains the current Caddy CA.
+- GitHub tag protections and release immutability are external settings; merging these files alone does not enable them. Follow `docs/RELEASING.md` and verify the settings before publishing v2.2.1.
+- Immutability applies to newly published releases, not retroactively to v2.2.0 assets. Existing version tags are covered once the tag rules are enabled.
+- Future releases are published manually by the owner. CI no longer has release-write authority.
+
+[Full changes since v2.2.0](https://github.com/jakubgt/homelab-vault-gen/compare/v2.2.0...v2.2.1)
+
+---
+
 # v2.2.0 — Privacy fixes and everyday usability
 
 This release fixes concealed credential exposure, focus-loss cleanup, and a clipboard completion race, and adds presets, immediate clearing, exact-value JSON export, and versioned deployment tooling.
