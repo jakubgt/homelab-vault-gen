@@ -52,7 +52,10 @@ jobs:
           node --check version.js
           npm test
       - name: Verify release packaging
-        run: python3 tests/test-release.py
+        run: |
+          python3 tests/test-release.py
+          python3 tests/test-publish-release.py
+          python3 tests/test-repository-security.py
 
   browser:
     runs-on: ubuntu-latest

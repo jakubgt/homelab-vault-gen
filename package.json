@@ -1,6 +1,6 @@
 {
   "name": "homelab-vault-gen",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "Offline credential generator with development-only browser regression tooling",
   "license": "MIT",

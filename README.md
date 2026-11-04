@@ -9,6 +9,12 @@
 
 An offline-first password, passphrase, username, and pattern generator for homelabs. Everything runs in the browser: there is no backend, telemetry, CDN, or outbound application request after the local assets load.
 
+<p align="center">
+  <img src="docs/screenshots/homelab-vault.png" alt="Homelab Vault in dark mode showing password generation, strength, character options, and privacy controls" width="480">
+</p>
+
+*The screenshot uses disposable demonstration output generated only for documentation.*
+
 ## Highlights
 
 - Cryptographically secure randomness from `crypto.getRandomValues`, with rejection sampling to avoid modulo bias.
@@ -46,7 +52,7 @@ Press <kbd>Space</kbd> outside a form control to generate again. The selected mo
 
 ### Open the file locally
 
-Download `homelab-vault-gen-v2.2.0.zip` from [the v2.2.0 release](https://github.com/jakubgt/homelab-vault-gen/releases/tag/v2.2.0), verify it against the release's `SHA256SUMS`, extract it, and open `index.html` in a current browser. The ZIP includes all runtime assets and records its source commit. No npm install or build is required to run it. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails.
+Download `homelab-vault-gen-v2.2.1.zip` from [the v2.2.1 release](https://github.com/jakubgt/homelab-vault-gen/releases/tag/v2.2.1), verify it against the release's `SHA256SUMS`, extract it, and open `index.html` in a current browser. The ZIP includes all runtime assets and records its source commit. No npm install or build is required to run it. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails.
 
 You can also clone the repository and open `index.html`. A source checkout displays its version with “source checkout”; packaged and LXC installations display a commit. Checksums detect accidental corruption; obtain the checksum and release through a trusted GitHub connection.
 
@@ -105,20 +111,20 @@ Caddy creates a private local certificate authority (CA). Each Windows computer,
 Copy this block into the LXC console:
 
 ```bash
-apt-get update
-apt-get install -y ca-certificates curl
+apt-get update &&
+apt-get install -y ca-certificates curl &&
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
   --output /root/install-homelab-vault.sh \
-  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.2.0/install-caddy-lxc.sh
-chmod 0700 /root/install-homelab-vault.sh
+  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.2.1/install-caddy-lxc.sh &&
+chmod 0700 /root/install-homelab-vault.sh &&
 /root/install-homelab-vault.sh
 ```
 
 The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
 
-It then installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), resolves v2.2.0 to a full commit, checks that its installer matches that revision, downloads the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
+It then installs the required Debian tools, verifies that v2.2.1 is a published stable immutable release and that its exact commit belongs to protected `main`, and compares the downloaded installer with that revision. Python 3 parses the release metadata; it is not an application runtime dependency. The installer installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), stages the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
 
-This command also migrates an installation made with the older updater. Download and run the versioned installer once to install the new update commands. An old `/opt` source checkout is left untouched; the new updater uses a temporary checkout.
+**Upgrading from v2.2.0 or earlier:** use the download-and-run block above once. The old `homelab-vault-update` command refuses the new protocol, so it cannot perform this migration itself. Enter the existing LXC IPv4 address when prompted. The installation preserves the Caddy CA and replaces the maintenance command with the hardened updater. An old `/opt` source checkout is left untouched; the new updater uses a temporary checkout.
 
 ### 2. Allow LAN access
 
@@ -184,9 +190,11 @@ homelab-vault-update check-update
 homelab-vault-update
 ```
 
-`status` shows the installed version, full commit, IP, and Caddy state. `check-update` reads stable `vX.Y.Z` tags and reports whether the highest version differs, without changing the deployment. With no arguments, the updater selects that latest stable tag, resolves it once, and runs that commit's installer against the same commit's assets. Tags and the GitHub repository remain part of the delivery trust model; commit consistency is not a separate signature guarantee.
+`status` shows the installed version, full commit, IP, and Caddy state. `check-update` asks GitHub for its latest published stable release and reports its exact commit without changing the deployment. Release selection requires immutable metadata: drafts, prereleases, mutable releases, and bare Git tags are rejected. Before checking out a candidate or executing its installer, the updater verifies that GitHub reports `main` as protected, fetches that branch's complete history, and requires the candidate to be on its first-parent history. A changed branch tip or failed API request stops the update. Installer and assets use the same verified commit.
 
-To select a reviewed version explicitly, use `homelab-vault-update v2.2.0` or `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`. The chosen revision must support the pinned installer protocol (v2.2.0 onward). Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
+To select a reviewed version explicitly, use `homelab-vault-update v2.2.1`. A deliberate commit selection uses `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`; it still requires protected-main history and the hardened protocol 2 (v2.2.1 onward), but does not require a release record. It cannot execute the older protocol 1 installers. Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
+
+Repository ownership, protected-main administration, and authenticated GitHub delivery remain trusted. These checks do not defend against takeover of the owner account or modification of the installed updater by an attacker with root access.
 
 ### Troubleshooting
 
@@ -266,11 +274,19 @@ On Linux, run the installer harness and release tests with:
 dash -n install-caddy-lxc.sh
 dash tests/test-installer.sh
 python3 tests/test-release.py
+python3 tests/test-publish-release.py
+python3 tests/test-repository-security.py
 ```
 
-The shell harness exercises actual temporary-directory rollback and mocks service/package actions. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, and deterministic release packaging. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A tagged release or a version.js change on main runs the full suite before publication.
+The shell harness exercises actual temporary-directory rollback and real temporary Git histories, with network/service/package operations replaced by fixtures. It rejects off-main installers before execution and tests release metadata failures. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, deterministic packaging, and owner-publishing/security-configuration guards. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A version.js change on main runs the full suite and prepares release artifacts with read-only repository permissions; publication is manual.
 
 For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image pinned by a multi-platform digest (`nginxinc/nginx-unprivileged@sha256:...`) after verifying that digest in your registry.
+
+## Manual releases and repository protections
+
+The owner publishes releases after reviewing the exact tested `main` commit. CI cannot publish a release or create a version tag. The required GitHub setup uses separate creation and immutability rules: only repository administrators may create version tags, and no actor may update or delete them through a bypass. New published releases must be immutable.
+
+These GitHub settings are external to Git and must be configured separately; committing a ruleset JSON file does not enable it. The owner can use `python -I scripts/configure-repository-security.py --apply`, or import the two files under `.github/security/` in GitHub and enable release immutability. The default command checks the actual remote settings without changing them. See [the owner release guide](docs/RELEASING.md) for setup, verification, and publishing instructions.
 
 ## Project layout
 
@@ -288,9 +304,13 @@ For reproducible high-assurance deployments, set `VAULT_IMAGE` to the same image
 | `tests/browser.spec.js`, `playwright.config.js` | Browser regressions and engine matrix |
 | `tests/test-installer.sh`, `tests/test-release.py` | Rollback and release packaging tests |
 | `scripts/build-release.py` | Deterministic offline ZIP and checksum/manifest builder |
+| `scripts/publish-release.py` | Owner-only manual publishing with protected-main, test, tag, and immutability checks |
+| `scripts/configure-repository-security.py`, `.github/security/` | Explicit GitHub protection setup and read-only verification |
+| `docs/RELEASING.md` | Owner release procedure and trust boundaries |
+| `docs/screenshots/homelab-vault.png` | App screenshot with disposable demo output |
 | `CHANGELOG.md` | Release notes and migration information |
 
-To build a release locally, run `python3 scripts/build-release.py --version 2.2.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist` from a clean checkout of that commit. Version declarations must agree. The release workflow validates the revision, builds the offline archive and checksums, then publishes the GitHub release. See [CHANGELOG.md](CHANGELOG.md) for v2.2.0 changes.
+To build a release locally, run `python3 -I scripts/build-release.py --version 2.2.1 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.2.1` from a clean checkout of that commit. Version declarations must agree. The read-only release workflow validates the revision and prepares the archive, checksums, and manifest. The owner publishes them explicitly using the release guide. See [CHANGELOG.md](CHANGELOG.md) for v2.2.1 changes.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, digest, and license information for vendored assets, and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

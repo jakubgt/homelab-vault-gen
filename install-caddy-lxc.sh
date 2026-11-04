@@ -4,8 +4,9 @@ set -eu
 umask 077
 
 REPO_URL="https://github.com/jakubgt/homelab-vault-gen.git"
-RELEASE_VERSION="2.2.0"
-PINNED_INSTALLER_PROTOCOL=1
+API_ROOT="https://api.github.com/repos/jakubgt/homelab-vault-gen"
+RELEASE_VERSION="2.2.1"
+PINNED_INSTALLER_PROTOCOL=2
 WEB_ROOT="/srv/homelab-vault"
 SITE_PARENT="${WEB_ROOT%/*}"
 WEB_MARKER=".homelab-vault-managed"
@@ -194,40 +195,109 @@ cleanup() {
     exit "$status"
 }
 
-# Resolve a release once, then use only its full commit for installer and assets.
+github_metadata() {
+    curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+        --connect-timeout 15 --max-time 60 --max-filesize 1048576 \
+        -H 'Accept: application/vnd.github+json' \
+        -H 'X-GitHub-Api-Version: 2022-11-28' "${API_ROOT}/$1"
+}
+
+# Python parses untrusted API JSON; no API value is evaluated as shell code.
+validate_metadata() {
+    command -v python3 >/dev/null 2>&1 || die "Install python3 before using this updater."
+    python3 -I -c '
+import json, re, sys
+try:
+    obj = json.load(sys.stdin)
+    if not isinstance(obj, dict):
+        raise ValueError("API response must be an object")
+    if sys.argv[1] == "main":
+        commit = obj.get("commit")
+        if obj.get("name") != "main" or obj.get("protected") is not True:
+            raise ValueError("main must be protected")
+        if not isinstance(commit, dict) or not isinstance(commit.get("sha"), str) or not re.fullmatch(r"[0-9a-f]{40}", commit["sha"]):
+            raise ValueError("main has no valid commit SHA")
+        print(commit["sha"])
+    else:
+        tag = obj.get("tag_name")
+        if not isinstance(tag, str) or not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
+            raise ValueError("release tag must be stable vX.Y.Z")
+        if sys.argv[2] != "latest" and tag != sys.argv[2]:
+            raise ValueError("release tag differs from requested tag")
+        if obj.get("draft") is not False or obj.get("prerelease") is not False:
+            raise ValueError("release must be published and stable")
+        if not isinstance(obj.get("published_at"), str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", obj["published_at"]):
+            raise ValueError("release has no publication timestamp")
+        if obj.get("immutable") is not True:
+            raise ValueError("release must be immutable; use an explicitly reviewed full SHA for rollback")
+        print(tag)
+except (ValueError, TypeError, KeyError) as error:
+    print("Invalid GitHub metadata: " + str(error), file=sys.stderr)
+    sys.exit(1)
+' "$@"
+}
+
+# Release names are accepted only through published immutable release metadata.
+# An explicit SHA is a deliberate rollback request; fetch_revision still checks
+# protected main history before it checks out or executes any repository files.
 resolve_revision() {
     requested_ref=$1
-    if [ "$requested_ref" = latest ]; then
-        remote_tags="$(git ls-remote --tags --refs "$REPO_URL")" \
-            || die "Cannot read release tags from GitHub."
-        requested_ref="$(printf '%s\n' "$remote_tags" \
-            | awk '$2 ~ /^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+$/ { sub(/^refs\/tags\//, "", $2); print $2 }' \
-            | sort -V | tail -n 1)"
-        [ -n "$requested_ref" ] || die "No stable release tags are available."
-    fi
-    if printf '%s\n' "$requested_ref" | grep -Eq '^[0-9a-f]{40}$'; then
+    case "$requested_ref" in
+        ''|*[!a-z0-9.]*) die "Invalid revision. Use latest, vX.Y.Z, or a full lowercase commit SHA." ;;
+    esac
+    if [ "${#requested_ref}" -eq 40 ] && printf '%s\n' "$requested_ref" | grep -Eq '^[0-9a-f]{40}$'; then
         RESOLVED_COMMIT=$requested_ref
-    elif printf '%s\n' "$requested_ref" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+    else
+        if [ "$requested_ref" = latest ]; then
+            release_endpoint=releases/latest
+        elif printf '%s\n' "$requested_ref" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+            release_endpoint="releases/tags/${requested_ref}"
+        else
+            die "Use an immutable stable release (v2.2.1), a reviewed full lowercase commit SHA, or latest."
+        fi
+        release_metadata="$(github_metadata "$release_endpoint")" \
+            || die "Cannot retrieve release metadata; no update will run. Check connectivity/API rate limits and retry."
+        requested_ref="$(printf '%s' "$release_metadata" | validate_metadata release "$requested_ref")" \
+            || die "Release trust validation failed; no update will run."
         remote_refs="$(git ls-remote --exit-code "$REPO_URL" \
             "refs/tags/${requested_ref}" "refs/tags/${requested_ref}^{}")" \
-            || die "Release ${requested_ref} was not found. Use a published tag or full commit SHA."
+            || die "Cannot resolve the published release tag ${requested_ref}."
         RESOLVED_COMMIT="$(printf '%s\n' "$remote_refs" \
             | awk '/\^\{\}$/ { peeled=$1 } !/\^\{\}$/ { direct=$1 } END { print peeled ? peeled : direct }')"
-    else
-        die "Use a stable release tag (v2.2.0), a full lowercase commit SHA, or latest."
     fi
-    printf '%s\n' "$RESOLVED_COMMIT" | grep -Eq '^[0-9a-f]{40}$' \
-        || die "GitHub returned an invalid commit SHA."
+    if [ "${#RESOLVED_COMMIT}" -ne 40 ] || ! printf '%s\n' "$RESOLVED_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+        die "GitHub returned an invalid commit SHA."
+    fi
     RESOLVED_REF=$requested_ref
 }
 
 fetch_revision() {
     checkout_dir=$1
     checkout_commit=$2
-    git -c init.defaultBranch=main init --quiet "$checkout_dir"
-    git -C "$checkout_dir" remote add origin "$REPO_URL"
-    git -C "$checkout_dir" fetch --quiet --depth 1 origin "$checkout_commit"
-    git -C "$checkout_dir" checkout --quiet --detach FETCH_HEAD
+    if [ "${#checkout_commit}" -ne 40 ] || ! printf '%s\n' "$checkout_commit" | grep -Eq '^[0-9a-f]{40}$'; then
+        die "Refusing an invalid candidate commit SHA."
+    fi
+    main_metadata="$(github_metadata branches/main)" \
+        || die "Cannot retrieve protected main metadata; no checkout will run. Check connectivity/API rate limits and retry."
+    trusted_tip="$(printf '%s' "$main_metadata" | validate_metadata main)" \
+        || die "Protected main validation failed; no checkout will run."
+    git -c init.defaultBranch=main init --quiet "$checkout_dir" \
+        || die "Cannot initialize the verification checkout."
+    git -C "$checkout_dir" remote add origin "$REPO_URL" \
+        || die "Cannot configure the verification remote."
+    # No shallow fetch: ancestry checks need main's complete first-parent history.
+    git -C "$checkout_dir" fetch --quiet --no-tags origin \
+        '+refs/heads/main:refs/remotes/origin/main' \
+        || die "Cannot fetch protected main history; no checkout will run."
+    [ "$(git -C "$checkout_dir" rev-parse refs/remotes/origin/main)" = "$trusted_tip" ] \
+        || die "main changed during verification. Retry the update."
+    git -C "$checkout_dir" rev-list --first-parent refs/remotes/origin/main \
+        >"${checkout_dir}/.git/reviewed-main-commits" \
+        || die "Cannot inspect protected main history."
+    grep -Fxq "$checkout_commit" "${checkout_dir}/.git/reviewed-main-commits" \
+        || die "Commit ${checkout_commit} is not on protected main's first-parent history."
+    git -C "$checkout_dir" checkout --quiet --detach "$checkout_commit" \
+        || die "Cannot check out the verified commit."
     [ "$(git -C "$checkout_dir" rev-parse HEAD)" = "$checkout_commit" ] \
         || die "Downloaded checkout does not match the selected commit."
 }
@@ -248,29 +318,35 @@ show_status() {
     systemctl is-active caddy || true
 }
 
-check_update() {
+check_update() (
     resolve_revision latest
+    check_dir="$(mktemp -d /tmp/homelab-vault-check.XXXXXX)" \
+        || die "Cannot create a temporary update-check directory."
+    trap 'rm -rf -- "$check_dir"' EXIT
+    trap 'exit 130' HUP INT TERM
+    fetch_revision "${check_dir}/source" "$RESOLVED_COMMIT"
     deployed_commit="$(read_deployment_value COMMIT)"
-    printf 'Latest stable tag: %s\nCommit: %s\n' "$RESOLVED_REF" "$RESOLVED_COMMIT"
+    printf 'Latest immutable release on protected main: %s\nCommit: %s\n' "$RESOLVED_REF" "$RESOLVED_COMMIT"
     if [ "$deployed_commit" = "$RESOLVED_COMMIT" ]; then
         printf 'The deployed site is current.\n'
     elif [ -z "$deployed_commit" ]; then
         printf 'Installed version is unknown. Run as root or update a legacy installation.\n'
     else
-        printf 'The latest stable tag differs from the deployed commit. To install it, run:\n  homelab-vault-update %s\n' "$RESOLVED_REF"
+        printf 'The latest immutable release differs from the deployed commit. To install it, run:\n  homelab-vault-update %s\n' "$RESOLVED_REF"
     fi
-}
+)
 
 bootstrap_update() (
     [ "$(id -u)" -eq 0 ] || die "Run updates as root inside the Debian LXC."
     resolve_revision "$1"
-    bootstrap_dir="$(mktemp -d /tmp/homelab-vault-update.XXXXXX)"
+    bootstrap_dir="$(mktemp -d /tmp/homelab-vault-update.XXXXXX)" \
+        || die "Cannot create a temporary update directory."
     trap 'rm -rf -- "$bootstrap_dir"' EXIT
     trap 'exit 130' HUP INT TERM
     fetch_revision "${bootstrap_dir}/source" "$RESOLVED_COMMIT"
     grep -Fxq "PINNED_INSTALLER_PROTOCOL=${PINNED_INSTALLER_PROTOCOL}" \
         "${bootstrap_dir}/source/install-caddy-lxc.sh" \
-        || die "That revision predates this pinned updater or uses an unsupported installer protocol."
+        || die "That revision predates the protected-main updater or uses an unsupported installer protocol. Versions before 2.2.1 cannot be executed by this updater."
     printf 'Installing %s (%s).\n' "$RESOLVED_REF" "$RESOLVED_COMMIT"
     VAULT_REF="$RESOLVED_COMMIT" /bin/sh "${bootstrap_dir}/source/install-caddy-lxc.sh" install
 )
@@ -312,8 +388,10 @@ case "$action" in
             'Install:     install-caddy-lxc.sh (defaults to its embedded release tag)' \
             'Update:      homelab-vault-update [update] [latest|vX.Y.Z|full-commit-SHA]' \
             'Inspect:     homelab-vault-update status' \
-            'Check tags:  homelab-vault-update check-update' \
-            'Override the initial installer ref with VAULT_REF; its bytes must match that revision.'
+            'Check release: homelab-vault-update check-update' \
+            'Release names require published stable immutable GitHub releases.' \
+            'Every revision must be on protected main first-parent history; updater execution requires protocol 2.' \
+            'Override the initial installer ref with VAULT_REF; its bytes must match that reviewed revision.'
         exit 0
         ;;
     status) [ "$#" -le 1 ] || die "Usage: homelab-vault-update status"; show_status; exit 0 ;;
@@ -415,7 +493,8 @@ apt-get install -y \
     debian-keyring \
     git \
     gnupg \
-    iproute2
+    iproute2 \
+    python3
 
 say "Fetching one verified Homelab Vault revision"
 resolve_revision "${VAULT_REF:-v${RELEASE_VERSION}}"
@@ -614,7 +693,7 @@ printf 'CA download: https://%s/caddy-root.crt\n' "$VAULT_IP"
 printf 'CA file SHA-256: %s\n' "$certificate_digest"
 printf 'Update later: homelab-vault-update\n'
 printf 'View status:  homelab-vault-update status\n'
-printf 'Check tags:   homelab-vault-update check-update\n'
+printf 'Check release: homelab-vault-update check-update\n'
 printf '\nTrust caddy-root.crt on every client before using the generator.\n'
 printf 'Compare its SHA-256 with the value above, then remove the download with:\n'
 printf '  rm -f -- %s\n' "$PUBLIC_CA"
