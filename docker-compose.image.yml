@@ -1,0 +1,17 @@
+services:
+  vault-gen:
+    # Select a published version explicitly, or use IMAGE@sha256:DIGEST.
+    image: "${VAULT_IMAGE:?Set VAULT_IMAGE to a published GHCR version or digest}"
+    init: true
+    ports:
+      - "${VAULT_BIND_ADDRESS:-127.0.0.1}:${VAULT_PORT:-8080}:8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped

@@ -40,8 +40,8 @@ GitHub documents [release immutability](https://docs.github.com/en/code-security
 With GitHub CLI authenticated as `jakubgt`, Python 3, and Git available, build from that clean checkout:
 
 ```bash
-python -I scripts/build-release.py --version 2.2.1 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.2.1
-python -I scripts/publish-release.py --version 2.2.1 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.2.1
+python -I scripts/build-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.3.0
+python -I scripts/publish-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.3.0
 ```
 
 Replace the placeholder with the reviewed commit's full SHA. Use a separate output directory for each version; the publisher requires exactly that release's three files. `-I` isolates Python from local module shadowing and `PYTHONPATH`. The publisher refuses a dirty checkout, the wrong owner/repository, an unprotected or different current main commit, missing successful CI, missing tag controls, disabled release immutability, mismatched artifacts, or a tag pointing elsewhere. It reproduces the artifacts locally before uploading. It creates a draft, uploads the exact files, and publishes only after rechecking policy and identity. Published releases and existing tag targets are never overwritten. A matching interrupted owner-created draft can be resumed without clobbering conflicting assets.
@@ -49,6 +49,8 @@ Replace the placeholder with the reviewed commit's full SHA. Use a separate outp
 If you publish through GitHub's web interface instead, perform the same review explicitly: create the version tag at the exact tested main commit, create a draft release, attach the offline ZIP, matching manifest, and `SHA256SUMS`, verify all files, then publish with immutability enabled. The CLI guardrails do not apply to manual browser actions. Never publish a draft before its assets are complete, because immutable assets cannot be replaced afterward.
 
 After publication, verify that the release is immutable and the tag resolves to the reviewed SHA. Download the three files and compare their SHA-256 values with the local build. Use the README migration instructions to update existing v2.2.0 LXC installations; their old maintenance command cannot execute protocol 2 directly.
+
+Container images have a separate owner-controlled publication step after the matching GitHub release. Follow [the container guide](CONTAINERS.md) for the digest-pinned AMD64/ARM64 build, read-only preflight checks, and explicit `--push` command. Publishing source or a GitHub release alone does not publish a registry image. CI continues to validate without package-write or release-write credentials.
 
 ## Trust boundaries
 

@@ -53,6 +53,51 @@
         return randomWord[0] % max;
     }
 
+    function generateRawSecretBytes(options = {}, randomSource = globalThis.crypto) {
+        const settings = normalizeOptions(options, { byteLength: 32, encoding: 'hex' }, []);
+        if (![32, 64].includes(settings.byteLength)) {
+            throw new RangeError('byteLength must be 32 or 64.');
+        }
+        if (!['hex', 'base64', 'base64url'].includes(settings.encoding)) {
+            throw new RangeError('encoding must be hex, base64, or base64url.');
+        }
+        requireRandomSource(randomSource);
+
+        const raw = new Uint8Array(settings.byteLength);
+        try {
+            randomSource.getRandomValues(raw);
+            if (settings.encoding === 'hex') {
+                const alphabet = '0123456789abcdef';
+                const output = new Uint8Array(raw.length * 2);
+                for (let index = 0; index < raw.length; index++) {
+                    output[index * 2] = alphabet.charCodeAt(raw[index] >>> 4);
+                    output[index * 2 + 1] = alphabet.charCodeAt(raw[index] & 15);
+                }
+                return output;
+            }
+
+            const urlSafe = settings.encoding === 'base64url';
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' + (urlSafe ? '-_' : '+/');
+            const output = new Uint8Array(urlSafe ? Math.ceil(raw.length * 4 / 3) : Math.ceil(raw.length / 3) * 4);
+            let offset = 0;
+            for (let index = 0; index < raw.length; index += 3) {
+                const remaining = raw.length - index;
+                const value = (raw[index] << 16) | ((raw[index + 1] || 0) << 8) | (raw[index + 2] || 0);
+                output[offset++] = alphabet.charCodeAt((value >>> 18) & 63);
+                output[offset++] = alphabet.charCodeAt((value >>> 12) & 63);
+                if (remaining > 1) output[offset++] = alphabet.charCodeAt((value >>> 6) & 63);
+                else if (!urlSafe) output[offset++] = 61;
+                if (remaining > 2) output[offset++] = alphabet.charCodeAt(value & 63);
+                else if (!urlSafe) output[offset++] = 61;
+            }
+            return output;
+        } finally {
+            // Keep the encoded working buffer for the caller's normal wipe path,
+            // but do not retain an additional copy of the original random bytes.
+            raw.fill(0);
+        }
+    }
+
     function normalizeCharsets(charsets) {
         if (!Array.isArray(charsets)) {
             throw new TypeError('charsets must be an array.');
@@ -404,6 +449,7 @@
         calculatePasswordEntropy,
         generatePassphraseBytes,
         generatePasswordBytes,
+        generateRawSecretBytes,
         generateUsernameBytes,
         getSecureRandomInt,
         normalizeSymbolPool,

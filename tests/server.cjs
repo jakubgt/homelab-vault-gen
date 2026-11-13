@@ -22,9 +22,12 @@ const publicFiles = new Map([
     ['/words.js', 'text/javascript; charset=utf-8'],
     ['/qrcode.min.js', 'text/javascript; charset=utf-8'],
     ['/styles.css', 'text/css; charset=utf-8'],
+    ['/manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
     ['/LICENSE', 'text/plain; charset=utf-8'],
     ['/THIRD_PARTY_NOTICES.md', 'text/plain; charset=utf-8'],
     ['/assets/vault-icon.png', 'image/png'],
+    ['/assets/icon-192.png', 'image/png'],
+    ['/assets/icon-512.png', 'image/png'],
 ]);
 
 const server = http.createServer((request, response) => {

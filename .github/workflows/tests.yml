@@ -56,6 +56,7 @@ jobs:
           python3 tests/test-release.py
           python3 tests/test-publish-release.py
           python3 tests/test-repository-security.py
+          python3 tests/test-container.py
 
   browser:
     runs-on: ubuntu-latest
@@ -102,13 +103,39 @@ jobs:
           grep -qi "content-security-policy:.*default-src 'none'" /tmp/vault-headers
           grep -qi 'cache-control:.*no-store' /tmp/vault-headers
           grep -qi 'x-frame-options: DENY' /tmp/vault-headers
-          for asset in core.js app.js version.js words.js qrcode.min.js styles.css LICENSE THIRD_PARTY_NOTICES.md; do
+          curl --fail --silent --show-error --head http://127.0.0.1:8080/manifest.webmanifest | grep -qi 'content-type: application/manifest+json'
+          for asset in core.js app.js version.js words.js qrcode.min.js styles.css LICENSE THIRD_PARTY_NOTICES.md manifest.webmanifest assets/vault-icon.png assets/icon-192.png assets/icon-512.png; do
             curl --fail --silent --show-error "http://127.0.0.1:8080/$asset" --output /dev/null
+          done
+          for private_file in install-caddy-lxc.sh test.js test-core.cjs nginx.conf Caddyfile docker-compose.yml package.json tests/browser.spec.js; do
+            test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:8080/$private_file")" = 404
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/.git/config)" = 403
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q vault-gen)")" = healthy
+      - name: Build packaged image and verify its runtime allowlist
+        env:
+          VAULT_COMMIT: ${{ github.sha }}
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+          docker build --build-arg "VAULT_VERSION=$version" --build-arg "VAULT_COMMIT=$VAULT_COMMIT" -t homelab-vault-ci .
+          docker run -d --name vault-image-ci --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m -p 127.0.0.1:8081:8080 homelab-vault-ci
+          curl --fail --silent --show-error --retry 15 --retry-delay 1 --retry-connrefused --dump-header /tmp/image-headers http://127.0.0.1:8081/ --output /tmp/image-index
+          grep -qi "content-security-policy:.*connect-src 'none'" /tmp/image-headers
+          grep -qi "content-security-policy:.*manifest-src 'self'" /tmp/image-headers
+          grep -qi 'cache-control:.*no-store' /tmp/image-headers
+          curl --fail --silent --show-error --head http://127.0.0.1:8081/manifest.webmanifest | grep -qi 'content-type: application/manifest+json'
+          for asset in core.js app.js words.js qrcode.min.js styles.css LICENSE THIRD_PARTY_NOTICES.md manifest.webmanifest assets/vault-icon.png assets/icon-192.png assets/icon-512.png; do
+            curl --fail --silent --show-error "http://127.0.0.1:8081/$asset" --output /dev/null
+          done
+          curl --fail --silent --show-error http://127.0.0.1:8081/version.js | grep -F "$VAULT_COMMIT"
+          for private_file in install-caddy-lxc.sh test.js test-core.cjs nginx.conf Caddyfile Dockerfile docker-compose.yml package.json cli.cjs scripts/publish-container.py; do
+            test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:8081/$private_file")" = 404
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8081/.git/config)" = 403
       - name: Container logs and cleanup
         if: always()
         run: |
           docker compose logs
           docker compose down
+          docker logs vault-image-ci || true
+          docker rm -f vault-image-ci || true

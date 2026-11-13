@@ -29,4 +29,8 @@ Paranoid Mode conceals generated plaintext in the output and accessibility tree,
 
 CSV exports retain exact raw fields and require Text-column import in spreadsheet programs. The CSV acknowledgement does not sanitize formulas or prevent an importer from converting data. TXT and JSON avoid spreadsheet cell interpretation when used as their native formats.
 
+Raw secrets contain 32 or 64 independently random bytes; Hex, Base64, and Base64URL are encodings of those bytes, not extra entropy or algorithm-specific key generation. The CLI prints plaintext to standard output without storing preferences. Terminals, pipes, redirected files, and downstream programs can retain output; JavaScript and stream copies cannot be proven erased.
+
+Standalone web app installation uses a manifest with no service worker or application cache. It does not add offline availability to hosted deployments or alter the memory/clipboard guarantees. Container publication remains a separate owner-only local operation after an immutable tested release; registry tag mutability and publication privileges remain trusted. Pin the reported image index digest for exact deployment content.
+
 Compromised browsers, malicious extensions, screen capture, keylogging, clipboard managers, and an untrusted server or network delivering modified application code are outside the application's control, but documentation errors that misrepresent those risks are in scope.

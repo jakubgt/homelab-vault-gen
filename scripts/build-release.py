@@ -24,20 +24,32 @@ RELEASE_FILES = (
     "SECURITY.md",
     "THIRD_PARTY_NOTICES.md",
     "app.js",
+    "assets/icon-192.png",
+    "assets/icon-512.png",
     "assets/vault-icon.png",
+    "cli.cjs",
     "core.js",
     "docker-compose.yml",
+    "docker-compose.image.yml",
+    "Dockerfile",
+    ".dockerignore",
+    "docs/CLI.md",
+    "docs/CONTAINERS.md",
     "docs/RELEASING.md",
     "docs/screenshots/homelab-vault.png",
     "index.html",
     "install-caddy-lxc.sh",
+    "manifest.webmanifest",
     "nginx.conf",
     "qrcode.min.js",
     "styles.css",
     "version.js",
     "words.js",
 )
-BINARY_FILES = frozenset({"assets/vault-icon.png", "docs/screenshots/homelab-vault.png"})
+BINARY_FILES = frozenset({
+    "assets/vault-icon.png", "assets/icon-192.png", "assets/icon-512.png",
+    "docs/screenshots/homelab-vault.png",
+})
 ARCHIVE_MANIFEST = "RELEASE-MANIFEST.json"
 FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 

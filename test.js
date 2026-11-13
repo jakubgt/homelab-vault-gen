@@ -199,6 +199,36 @@ const renderedCaddy = caddy
     .replace(/^https:\/\/<LXC_IPV4>\s*\{/m, 'https://192.0.2.1 {')
     .replace(/^\s*ip_address_must_be_configured\s*$/m, '');
 
+// Directive and source order do not change this policy. Reject duplicate
+// directives, which browsers otherwise resolve by silently taking the first.
+function parseCsp(policy) {
+    const directives = {};
+    for (const part of policy.split(';')) {
+        const [rawName, ...sources] = part.trim().split(/\s+/);
+        if (!rawName) continue;
+        const name = rawName.toLowerCase();
+        if (Object.hasOwn(directives, name)) return null;
+        directives[name] = [...new Set(sources)].sort();
+    }
+    return Object.fromEntries(Object.entries(directives).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+const nginxCspHeaders = [...nginx.matchAll(/^\s*add_header\s+Content-Security-Policy\s+"([^"]+)"\s+always;/gm)];
+const caddyCspHeaders = [...activeCaddy.matchAll(/^\s*Content-Security-Policy\s+"([^"]+)"\s*$/gm)];
+const nginxPolicy = parseCsp(nginxCspHeaders[0]?.[1] || '');
+const caddyPolicy = parseCsp(caddyCspHeaders[0]?.[1] || '');
+const requiredCsp = {
+    'default-src': ["'none'"],
+    'script-src': ["'self'"],
+    'style-src': ["'self'"],
+    'img-src': ["'self'", 'data:'],
+    'connect-src': ["'none'"],
+    'manifest-src': ["'self'"],
+    'base-uri': ["'none'"],
+    'form-action': ["'none'"],
+    'frame-ancestors': ["'none'"],
+};
+
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
 check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
 check('shared production core loads before app.js', html.indexOf('core.js') > -1 && html.indexOf('core.js') < html.indexOf('app.js'));
@@ -216,6 +246,9 @@ check('Paranoid Mode never clears unrelated origin storage', !app.includes('loca
 check('QR cleanup removes the library title copy', app.includes("removeAttribute('title')"));
 check('served CSP does not allow unsafe inline code', !nginx.includes("'unsafe-inline'") && !caddy.includes("'unsafe-inline'"));
 check('served CSP permits local QR data images', [nginx, caddy].every((config) => config.includes("img-src 'self' data:")));
+check('NGINX and Caddy each define one unambiguous CSP', nginxCspHeaders.length === 1 && caddyCspHeaders.length === 1 && Boolean(nginxPolicy) && Boolean(caddyPolicy));
+check('NGINX and Caddy CSP directives stay synchronized', Boolean(nginxPolicy) && Boolean(caddyPolicy) && JSON.stringify(nginxPolicy) === JSON.stringify(caddyPolicy));
+check('served CSP retains required local-only sources and disables connections', [nginxPolicy, caddyPolicy].every((policy) => Boolean(policy) && Object.entries(requiredCsp).every(([name, sources]) => JSON.stringify(policy[name]) === JSON.stringify(sources))));
 check(
     'Caddy requires the LXC IPv4 and uses its internal CA',
     /^https:\/\/<LXC_IPV4>\s*\{/m.test(activeCaddy) &&

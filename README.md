@@ -5,9 +5,12 @@
 # Homelab Vault
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/jakubgt/homelab-vault-gen/tests.yml?branch=main&label=tests)](https://github.com/jakubgt/homelab-vault-gen/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/jakubgt/homelab-vault-gen)](https://github.com/jakubgt/homelab-vault-gen/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An offline-first password, passphrase, username, and pattern generator for homelabs. Everything runs in the browser: there is no backend, telemetry, CDN, or outbound application request after the local assets load.
+An offline-first password, passphrase, username, pattern, and raw-secret generator for homelabs. Everything runs in the browser: there is no backend, telemetry, CDN, or outbound application request after the local assets load. It generates credentials for your password manager or infrastructure; it does not store them.
+
+[Features](#highlights) · [Quick start](#quick-start) · [Raw secrets](#raw-secrets) · [CLI](#command-line-use) · [LAN HTTPS](#lan-https-with-caddy-on-a-debian-lxc) · [Security](#security-model) · [Tests](#tests)
 
 <p align="center">
   <img src="docs/screenshots/homelab-vault.png" alt="Homelab Vault in dark mode showing password generation, strength, character options, and privacy controls" width="480">
@@ -22,16 +25,18 @@ An offline-first password, passphrase, username, and pattern generator for homel
 - Exact password entropy for the class-constrained output space, plus conservative passphrase and pattern estimates.
 - The full 7,776-word EFF large wordlist for passphrases and usernames.
 - Printable-ASCII pattern templates such as `[A-Z]{3}-[0-9]{4}`.
+- Raw 256- or 512-bit secrets encoded as Hex, Base64, or Base64URL, with exact byte counts.
 - Local QR rendering with generous white margins and cancellable bulk TXT/JSON/CSV export with no upload.
 - Paranoid Mode that conceals plaintext from both the display and accessibility tree, clears on focus loss, and disables file export and preference saving.
 - Clear now, a post-copy countdown, output length checks, lowercase usernames, and built-in or named generation presets.
 - A `#paranoid` launch address that activates privacy controls before the first generation and keeps them active after reload.
 - Responsive light/dark UI, keyboard-accessible tabs, reduced-motion support, and screen-reader labels.
 - Hardened NGINX and Caddy examples with a strict Content Security Policy.
+- A dependency-free CLI, runtime-only container packaging, and standalone web app installation on supported browsers.
 
 ## Use it
 
-1. Pick Password, Passphrase, Username, or Pattern.
+1. Pick Password, Passphrase, Username, Pattern, or Raw secret.
 2. Adjust the options. Each generation setting immediately creates one new value.
 3. Select **Generate** for another value, **Copy** for the clipboard, or **Show QR** for local transfer.
 4. Use **Clear now** whenever you finish. After copying, a countdown shows when the displayed result will clear. The app cannot erase OS clipboard history.
@@ -48,11 +53,22 @@ Press <kbd>Space</kbd> outside a form control to generate again. The selected mo
 
 **About & status** shows the app version, deployed source commit when available, delivery method, and licenses. It makes no network request to check for updates. Remote HTTP shows a warning; use trusted HTTPS for access from another device.
 
+## Raw secrets
+
+Choose **Raw secret**, a byte count, and an encoding. Every byte comes directly from `crypto.getRandomValues`; this mode does not enforce password character classes. Base64 padding and hexadecimal digits represent the same random bytes and do not add entropy.
+
+| Random bytes | Entropy | Hex characters | Base64 characters (padded) | Base64URL characters (unpadded) |
+|---|---|---|---|---|
+| 32 | 256 bits | 64 | 44 | 43 |
+| 64 | 512 bits | 128 | 88 | 86 |
+
+Use the exact size and encoding required by the target application. These are generic random secrets, not SSH keypairs, password hashes, or a replacement for a service's own key-generation procedure. Raw mode shares the normal copy, QR, presets, Paranoid, and bulk-export controls.
+
 ## Quick start
 
 ### Open the file locally
 
-Download `homelab-vault-gen-v2.2.1.zip` from [the v2.2.1 release](https://github.com/jakubgt/homelab-vault-gen/releases/tag/v2.2.1), verify it against the release's `SHA256SUMS`, extract it, and open `index.html` in a current browser. The ZIP includes all runtime assets and records its source commit. No npm install or build is required to run it. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails.
+Download the versioned `homelab-vault-gen-vX.Y.Z.zip` from [the latest published release](https://github.com/jakubgt/homelab-vault-gen/releases/latest), verify it against that release's `SHA256SUMS`, extract it, and open `index.html` in a current browser. The ZIP includes all runtime assets and records its source commit. No npm install or build is required to run it. This is the simplest air-gapped option. Some browsers restrict the modern clipboard API on `file://`; the app will try a legacy local fallback and report if copying fails. Source checkouts can contain features awaiting owner publication in a new release.
 
 You can also clone the repository and open `index.html`. A source checkout displays its version with “source checkout”; packaged and LXC installations display a commit. Checksums detect accidental corruption; obtain the checksum and release through a trusted GitHub connection.
 
@@ -86,6 +102,8 @@ VAULT_BIND_ADDRESS=0.0.0.0 docker compose up -d
 
 For access from other devices, put the app behind trusted HTTPS. Plain HTTP lets anyone able to modify the response replace the generator code and capture future credentials.
 
+The modern Clipboard API requires a secure context; `crypto.getRandomValues` remains available on HTTP, and the app attempts a legacy copy fallback. HTTPS protects the delivered code as well as enabling the modern clipboard path. See the browser documentation for [Clipboard](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText) and [Web Crypto](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues).
+
 Useful commands:
 
 ```bash
@@ -93,6 +111,48 @@ docker compose ps
 docker compose logs -f vault-gen
 docker compose down
 ```
+
+For a runtime-only image, multi-platform GHCR publishing, and `docker-compose.image.yml`, see [the container guide](docs/CONTAINERS.md). Image publication is an explicit owner action after a reviewed immutable release; a source merge alone does not make a new registry tag available.
+
+### Install as a standalone app
+
+On a supported browser, open the trusted HTTPS or loopback deployment and use the browser's **Install app** or **Add to Home Screen** command. The manifest provides the new icon, a standalone window, and a Paranoid Mode shortcut where supported. Installation is browser-dependent and is not available from `file://`.
+
+There is no service worker or persistent application cache. An installed hosted app still needs its server when opening or reloading; for disconnected use, download and verify the local ZIP instead. Installing a shortcut does not strengthen the browser's memory or clipboard guarantees. See [browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable).
+
+### Credentials in Docker Compose
+
+Keep the generated secret unchanged. Escaping depends on where you paste it:
+
+- **Inline Compose YAML:** Compose interprets dollar signs in values. Use `$$` for each literal `$`, for example `APP_SECRET: "example$$literal"` delivers `example$literal` to the container.
+- **Compose `.env`:** single-quoted values are literal, for example `APP_SECRET='example$literal'`. Doubling dollar signs is not a universal `.env` transformation.
+- **Other configuration formats:** follow that application's quoting rules. The config-friendly password preset avoids `$` and other common metacharacters but does not replace format-specific validation.
+
+The examples are disposable demonstration values. [Docker documents YAML interpolation](https://docs.docker.com/reference/compose-file/interpolation/) and [`.env` quoting](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) separately.
+
+### Homepage dashboard
+
+Copy `assets/icon-192.png` into a Homepage directory mounted at `/app/public/icons` as `homelab-vault.png`, restart Homepage, then add an entry to `services.yaml`:
+
+```yaml
+- Security:
+    - Homelab Vault:
+        icon: /icons/homelab-vault.png
+        href: https://192.168.1.50
+        description: Local credential and raw-secret generator
+```
+
+Use your actual trusted HTTPS address. Serve the copied icon from the dashboard itself: the generator's same-origin resource policy deliberately restricts cross-origin embedding. No credential, API token, or widget is needed. See [Homepage services configuration](https://gethomepage.dev/configs/services/).
+
+## Command-line use
+
+With Node.js 22 or newer, use the same generation engine without installing packages:
+
+```bash
+node cli.cjs --help
+```
+
+See [the CLI guide](docs/CLI.md) for modes, byte encodings, bounds, and piping. Output is plaintext; protect terminals, destinations, and shell pipelines accordingly.
 
 ## LAN HTTPS with Caddy on a Debian LXC
 
@@ -115,14 +175,14 @@ apt-get update &&
 apt-get install -y ca-certificates curl &&
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
   --output /root/install-homelab-vault.sh \
-  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.2.1/install-caddy-lxc.sh &&
+  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.3.0/install-caddy-lxc.sh &&
 chmod 0700 /root/install-homelab-vault.sh &&
 /root/install-homelab-vault.sh
 ```
 
 The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
 
-It then installs the required Debian tools, verifies that v2.2.1 is a published stable immutable release and that its exact commit belongs to protected `main`, and compares the downloaded installer with that revision. Python 3 parses the release metadata; it is not an application runtime dependency. The installer installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), stages the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
+It then installs the required Debian tools, verifies that v2.3.0 is a published stable immutable release and that its exact commit belongs to protected `main`, and compares the downloaded installer with that revision. Python 3 parses the release metadata; it is not an application runtime dependency. The installer installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), stages the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
 
 **Upgrading from v2.2.0 or earlier:** use the download-and-run block above once. The old `homelab-vault-update` command refuses the new protocol, so it cannot perform this migration itself. Enter the existing LXC IPv4 address when prompted. The installation preserves the Caddy CA and replaces the maintenance command with the hardened updater. An old `/opt` source checkout is left untouched; the new updater uses a temporary checkout.
 
@@ -192,7 +252,7 @@ homelab-vault-update
 
 `status` shows the installed version, full commit, IP, and Caddy state. `check-update` asks GitHub for its latest published stable release and reports its exact commit without changing the deployment. Release selection requires immutable metadata: drafts, prereleases, mutable releases, and bare Git tags are rejected. Before checking out a candidate or executing its installer, the updater verifies that GitHub reports `main` as protected, fetches that branch's complete history, and requires the candidate to be on its first-parent history. A changed branch tip or failed API request stops the update. Installer and assets use the same verified commit.
 
-To select a reviewed version explicitly, use `homelab-vault-update v2.2.1`. A deliberate commit selection uses `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`; it still requires protected-main history and the hardened protocol 2 (v2.2.1 onward), but does not require a release record. It cannot execute the older protocol 1 installers. Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
+To select a reviewed version explicitly, use `homelab-vault-update v2.3.0`. A deliberate commit selection uses `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`; it still requires protected-main history and the hardened protocol 2 (v2.2.1 onward), but does not require a release record. It cannot execute the older protocol 1 installers. Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
 
 Repository ownership, protected-main administration, and authenticated GitHub delivery remain trusted. These checks do not defend against takeover of the owner account or modification of the installed updater by an attacker with root access.
 
@@ -256,6 +316,7 @@ node --check app.js
 node --check test.js
 node test.js
 node test-core.cjs
+node tests/test-cli.cjs
 ```
 
 For behavioral browser tests, install development-only tools and browser binaries:
@@ -276,6 +337,7 @@ dash tests/test-installer.sh
 python3 tests/test-release.py
 python3 tests/test-publish-release.py
 python3 tests/test-repository-security.py
+python3 tests/test-container.py
 ```
 
 The shell harness exercises actual temporary-directory rollback and real temporary Git histories, with network/service/package operations replaced by fixtures. It rejects off-main installers before execution and tests release metadata failures. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, deterministic packaging, and owner-publishing/security-configuration guards. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A version.js change on main runs the full suite and prepares release artifacts with read-only repository permissions; publication is manual.
@@ -294,10 +356,13 @@ These GitHub settings are external to Git and must be configured separately; com
 |---|---|
 | `index.html`, `styles.css`, `app.js` | Accessible browser UI and state handling |
 | `core.js` | Shared RNG, all credential generators, entropy, symbols, and pattern parsing |
+| `cli.cjs`, `docs/CLI.md` | Dependency-free Node.js interface and usage guide |
 | `version.js` | Local version/source metadata; populated with a commit during packaging/deployment |
 | `words.js` | Vendored EFF large wordlist |
 | `qrcode.min.js` | Vendored local QR renderer |
 | `docker-compose.yml`, `nginx.conf` | Unprivileged container deployment |
+| `Dockerfile`, `docker-compose.image.yml`, `docs/CONTAINERS.md` | Runtime-only image, image deployment, and owner publication |
+| `manifest.webmanifest`, `assets/icon-192.png`, `assets/icon-512.png` | Standalone installation metadata and icons |
 | `Caddyfile` | Required-IP LAN HTTPS template and deployment alternatives |
 | `install-caddy-lxc.sh` | Guided Debian LXC installation and update script |
 | `test.js`, `test-core.cjs` | Zero-dependency core and repository checks |
@@ -310,7 +375,7 @@ These GitHub settings are external to Git and must be configured separately; com
 | `docs/screenshots/homelab-vault.png` | App screenshot with disposable demo output |
 | `CHANGELOG.md` | Release notes and migration information |
 
-To build a release locally, run `python3 -I scripts/build-release.py --version 2.2.1 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.2.1` from a clean checkout of that commit. Version declarations must agree. The read-only release workflow validates the revision and prepares the archive, checksums, and manifest. The owner publishes them explicitly using the release guide. See [CHANGELOG.md](CHANGELOG.md) for v2.2.1 changes.
+To build a release locally, run `python3 -I scripts/build-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.3.0` from a clean checkout of that commit. Version declarations must agree. The read-only release workflow validates the revision and prepares the archive, checksums, and manifest. The owner publishes them explicitly using the release guide. See [CHANGELOG.md](CHANGELOG.md) for v2.3.0 changes.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, digest, and license information for vendored assets, and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

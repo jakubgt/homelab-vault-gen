@@ -26,10 +26,13 @@ COMMIT = "0123456789abcdef" * 2 + "01234567"
 EXPECTED_FILES = {
     "Caddyfile", "CHANGELOG.md", "LICENSE", "README.md", "SECURITY.md",
     "THIRD_PARTY_NOTICES.md", "app.js", "assets/vault-icon.png", "core.js",
-    "docker-compose.yml", "docs/RELEASING.md", "docs/screenshots/homelab-vault.png",
-    "index.html", "install-caddy-lxc.sh", "nginx.conf",
+    "assets/icon-192.png", "assets/icon-512.png", "cli.cjs", ".dockerignore", "Dockerfile",
+    "docker-compose.yml", "docker-compose.image.yml", "docs/CLI.md", "docs/CONTAINERS.md",
+    "docs/RELEASING.md", "docs/screenshots/homelab-vault.png",
+    "index.html", "install-caddy-lxc.sh", "manifest.webmanifest", "nginx.conf",
     "qrcode.min.js", "styles.css", "version.js", "words.js", "RELEASE-MANIFEST.json",
 }
+BINARY_FILES = {"assets/vault-icon.png", "assets/icon-192.png", "assets/icon-512.png", "docs/screenshots/homelab-vault.png"}
 
 
 class ReleaseTests(unittest.TestCase):
@@ -46,7 +49,7 @@ class ReleaseTests(unittest.TestCase):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(b"fixture line one\r\nfixture line two\r\n")
-        for name in ("assets/vault-icon.png", "docs/screenshots/homelab-vault.png"):
+        for name in BINARY_FILES:
             (self.root / name).write_bytes(b"\x89PNG\r\n\x1a\n\x00binary\xff")
         (self.root / "package.json").write_text(json.dumps({"version": VERSION}), encoding="utf-8")
         (self.root / "version.js").write_text(
@@ -92,9 +95,9 @@ class ReleaseTests(unittest.TestCase):
                 expected_mode = 0o755 if entry["path"] == "install-caddy-lxc.sh" else 0o644
                 self.assertEqual(stat.S_IMODE(info.external_attr >> 16), expected_mode)
                 self.assertEqual(entry["mode"], f"{expected_mode:04o}")
-                if entry["path"] not in ("assets/vault-icon.png", "docs/screenshots/homelab-vault.png"):
+                if entry["path"] not in BINARY_FILES:
                     self.assertNotIn(b"\r", content)
-            for name in ("assets/vault-icon.png", "docs/screenshots/homelab-vault.png"):
+            for name in BINARY_FILES:
                 self.assertEqual(archive.read(name), (self.root / name).read_bytes())
             extracted = self.workspace / "extracted"
             archive.extractall(extracted)
@@ -111,7 +114,7 @@ class ReleaseTests(unittest.TestCase):
         original = self.artifact_bytes(self.output)
         self.build()
         self.assertEqual(self.artifact_bytes(self.output), original)
-        for name in EXPECTED_FILES - {"RELEASE-MANIFEST.json", "assets/vault-icon.png", "docs/screenshots/homelab-vault.png"}:
+        for name in EXPECTED_FILES - {"RELEASE-MANIFEST.json"} - BINARY_FILES:
             source = self.root / name
             source.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
             source.chmod(0o600)
