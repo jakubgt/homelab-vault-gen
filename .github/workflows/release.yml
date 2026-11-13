@@ -3,7 +3,13 @@ name: release
 on:
   push:
     branches: [main]
-    paths: ['version.js']
+    paths:
+      - version.js
+      - scripts/build-release.py
+      - scripts/verify-release.py
+      - tests/test-release.py
+      - tests/test-verify-release.py
+      - .github/workflows/release.yml
   workflow_dispatch:
 
 # CI only validates and packages; publication is an owner-only local command.
@@ -46,13 +52,14 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Build verified release artifacts without publishing
+      - name: Build and verify release artifacts without publishing
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
           python3 scripts/build-release.py --version "$version" --commit "$GITHUB_SHA" --output dist
+          python3 -I scripts/verify-release.py --directory dist --version "$version" --commit "$GITHUB_SHA"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-assets-${{ github.sha }}

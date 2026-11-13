@@ -41,6 +41,7 @@ With GitHub CLI authenticated as `jakubgt`, Python 3, and Git available, build f
 
 ```bash
 python -I scripts/build-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.3.0
+python -I scripts/verify-release.py --directory dist/v2.3.0 --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA
 python -I scripts/publish-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.3.0
 ```
 
@@ -49,6 +50,10 @@ Replace the placeholder with the reviewed commit's full SHA. Use a separate outp
 If you publish through GitHub's web interface instead, perform the same review explicitly: create the version tag at the exact tested main commit, create a draft release, attach the offline ZIP, matching manifest, and `SHA256SUMS`, verify all files, then publish with immutability enabled. The CLI guardrails do not apply to manual browser actions. Never publish a draft before its assets are complete, because immutable assets cannot be replaced afterward.
 
 After publication, verify that the release is immutable and the tag resolves to the reviewed SHA. Download the three files and compare their SHA-256 values with the local build. Use the README migration instructions to update existing v2.2.0 LXC installations; their old maintenance command cannot execute protocol 2 directly.
+
+The release workflow automatically runs the standalone verifier after building and before uploading its artifact. To check a fresh download, put the three published files in a separate directory and run the same verifier command against that directory, with the reviewed version and commit. It checks the archive in place without extracting or executing its contents. An optional `--extracted DIRECTORY` also checks listed installed files. Obtain the verifier from a trusted checkout or a previously verified release; it is not a signature and cannot establish authenticity if both an artifact and its checksum source were replaced together.
+
+The separate **Verify published release** workflow runs after a release is published, or manually with an explicit stable version tag. It uses the verifier from a pinned protected-main revision, verifies immutable release metadata and the tag's exact commit, downloads only the expected three assets, and checks their contents. It never executes the downloaded archive, publishes artifacts, or changes repository settings. Inspect its result after publishing, alongside the local publisher's verification.
 
 Container images have a separate owner-controlled publication step after the matching GitHub release. Follow [the container guide](CONTAINERS.md) for the digest-pinned AMD64/ARM64 build, read-only preflight checks, and explicit `--push` command. Publishing source or a GitHub release alone does not publish a registry image. CI continues to validate without package-write or release-write credentials.
 
