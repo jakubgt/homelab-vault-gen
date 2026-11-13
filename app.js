@@ -9,6 +9,7 @@ const {
     generatePasswordBytes,
     generatePassphraseBytes,
     generateUsernameBytes,
+    generateRawSecretBytes,
     getSecureRandomInt,
     normalizeSymbolPool,
     parsePattern
@@ -19,7 +20,7 @@ const STORAGE_KEYS = Object.freeze({
     theme: 'vault_theme',
     profiles: 'vault_profiles'
 });
-const MODES = Object.freeze(['pwd', 'pass', 'user', 'pattern']);
+const MODES = Object.freeze(['pwd', 'pass', 'user', 'pattern', 'raw']);
 
 const el = {
     result: document.getElementById('result'),
@@ -43,10 +44,14 @@ const el = {
     tabPass: document.getElementById('tab-pass'),
     tabUser: document.getElementById('tab-user'),
     tabPattern: document.getElementById('tab-pattern'),
+    tabRaw: document.getElementById('tab-raw'),
     pwdOpts: document.getElementById('pwd-options'),
     passOpts: document.getElementById('pass-options'),
     userOpts: document.getElementById('user-options'),
     patternOpts: document.getElementById('pattern-options'),
+    rawOpts: document.getElementById('raw-options'),
+    rawByteLength: document.getElementById('raw-byte-length'),
+    rawEncoding: document.getElementById('raw-encoding'),
     patternInput: document.getElementById('pattern-input'),
     symbolPreset: document.getElementById('symbol-preset'),
     symInput: document.getElementById('sym-input'),
@@ -82,18 +87,20 @@ const el = {
     toast: document.getElementById('toast')
 };
 
-const tabs = [el.tabPwd, el.tabPass, el.tabUser, el.tabPattern];
+const tabs = [el.tabPwd, el.tabPass, el.tabUser, el.tabPattern, el.tabRaw];
 const panels = {
     pwd: el.pwdOpts,
     pass: el.passOpts,
     user: el.userOpts,
-    pattern: el.patternOpts
+    pattern: el.patternOpts,
+    raw: el.rawOpts
 };
 const tabByMode = {
     pwd: el.tabPwd,
     pass: el.tabPass,
     user: el.tabUser,
-    pattern: el.tabPattern
+    pattern: el.tabPattern,
+    raw: el.tabRaw
 };
 
 let currentMode = 'pwd';
@@ -132,6 +139,7 @@ function wipeMemory() {
 function cleanupQr() {
     el.qrContainer.replaceChildren();
     el.qrContainer.removeAttribute('title');
+    el.qrModal.classList.remove('qr-expanded');
 }
 
 function closeQr() {
@@ -378,7 +386,20 @@ function generateValue(skipDomUpdate = false) {
     if (currentMode === 'pwd') return generatePassword(skipDomUpdate);
     if (currentMode === 'pass') return generatePassphrase(skipDomUpdate);
     if (currentMode === 'user') return generateUsername(skipDomUpdate);
+    if (currentMode === 'raw') return generateRawSecret(skipDomUpdate);
     return generatePattern(skipDomUpdate);
+}
+
+function getRawSecretOptions() {
+    return { byteLength: Number(el.rawByteLength.value), encoding: el.rawEncoding.value };
+}
+
+function generateRawSecret(skipDomUpdate = false) {
+    wipeMemory();
+    activeSecretBuffer = generateRawSecretBytes(getRawSecretOptions());
+    const text = new TextDecoder().decode(activeSecretBuffer);
+    if (!skipDomUpdate) setResult(text);
+    return text;
 }
 
 function generate() {
@@ -503,9 +524,14 @@ function calculateEntropyAndStrength() {
     let entropy = 0;
 
     if (currentMode === 'pass') {
-entropy = calculatePassphraseEntropy(getPassphraseOptions(), WORDS);
+        entropy = calculatePassphraseEntropy(getPassphraseOptions(), WORDS);
 
         el.poolInfo.textContent = `${lengths.pass.toLocaleString()} words from a ${WORDS.length.toLocaleString()}-word list`;
+    } else if (currentMode === 'raw') {
+        const { byteLength, encoding } = getRawSecretOptions();
+        entropy = byteLength * 8;
+        const label = { hex: 'Hex', base64: 'Base64', base64url: 'Base64url' }[encoding];
+        el.poolInfo.textContent = `${byteLength} random bytes · ${label} encoding`;
     } else if (currentMode === 'pattern') {
         const analysis = parsePattern(el.patternInput.value);
         if (analysis.error) {
@@ -654,7 +680,7 @@ function updateUI(shouldGenerate = true) {
         panel.hidden = !active;
     }
 
-    const usesLength = currentMode !== 'pattern';
+    const usesLength = ['pwd', 'pass', 'user'].includes(currentMode);
     el.lengthContainer.classList.toggle('hidden', !usesLength);
     el.length.classList.toggle('hidden', !usesLength);
     el.metricsContainer.classList.toggle('hidden', currentMode === 'user');
@@ -745,6 +771,8 @@ function collectSettings() {
         targetMaxLength: el.targetMaxLength.value,
         userNumCount: document.getElementById('user-num-count').value,
         userSep: document.getElementById('opt-user-sep').value,
+        rawByteLength: Number(el.rawByteLength.value),
+        rawEncoding: el.rawEncoding.value,
         patternStr: el.patternInput.value
     };
 
@@ -817,6 +845,8 @@ function applySettings(saved) {
         if (['-', '_', '.', ' ', 'random'].includes(saved.passSep)) document.getElementById('opt-pass-sep').value = saved.passSep;
         if (['', '-', '_', '.'].includes(saved.userSep)) document.getElementById('opt-user-sep').value = saved.userSep;
         if (typeof saved.patternStr === 'string') el.patternInput.value = saved.patternStr.slice(0, 512);
+        el.rawByteLength.value = [32, 64].includes(saved.rawByteLength) ? String(saved.rawByteLength) : '32';
+        el.rawEncoding.value = ['hex', 'base64', 'base64url'].includes(saved.rawEncoding) ? saved.rawEncoding : 'hex';
 
         const legacyPreset = saved.customSyms ? 'custom' : (saved.safe ? 'friendly' : 'default');
         el.symbolPreset.value = ['default', 'friendly', 'custom'].includes(saved.symbolPreset) ? saved.symbolPreset : legacyPreset;
@@ -888,11 +918,14 @@ function applyProfile(value) {
         symbolPreset: 'default', passCaps: true, passCapsRand: false,
         passNums: false, passNumsRand: true, passNumCount: 2, passSep: '-',
         userNums: true, userNumCount: 3, userSep: '', userLower: false,
+        rawByteLength: 32, rawEncoding: 'hex',
         targetMaxLength: '', patternStr: '[A-Z]{3}-[0-9]{4}-[a-z]{5}'
     };
     const presets = {
         balanced: {}, alphanumeric: { syms: false }, friendly: { symbolPreset: 'friendly' },
-        passphrase: { mode: 'pass' }, pin: { lengths: { pwd: 6, pass: 6, user: 2 }, upper: false, lower: false, syms: false }
+        passphrase: { mode: 'pass' }, pin: { lengths: { pwd: 6, pass: 6, user: 2 }, upper: false, lower: false, syms: false },
+        'raw-hex': { mode: 'raw' },
+        'raw-base64': { mode: 'raw', rawEncoding: 'base64' }
     };
     const profile = value.startsWith('saved:') ? savedProfiles[Number(value.slice(6))] : null;
     if (!profile && !Object.hasOwn(presets, value)) return;
@@ -1028,7 +1061,7 @@ for (const id of ['opt-pass-caps', 'opt-pass-nums', 'opt-user-nums']) {
     });
 }
 
-for (const id of ['opt-pass-sep', 'opt-user-sep']) {
+for (const id of ['opt-pass-sep', 'opt-user-sep', 'raw-byte-length', 'raw-encoding']) {
     document.getElementById(id).addEventListener('change', () => {
         generate();
         saveSettings();
@@ -1104,7 +1137,7 @@ el.qrBtn.addEventListener('click', () => {
 
     cleanupQr();
     try {
-        new QRCode(el.qrContainer, {
+        const qr = new QRCode(el.qrContainer, {
             text: currentResult,
             width: 210,
             height: 210,
@@ -1112,6 +1145,26 @@ el.qrBtn.addEventListener('click', () => {
             colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.M
         });
+        const canvas = el.qrContainer.querySelector('canvas');
+        if (canvas) {
+            // The pinned renderer draws fractional modules at a fixed size.
+            // Redraw its encoded matrix at integer pixels, retaining at least
+            // four pixels per module for dense credentials before CSS scaling.
+            const matrix = qr._oQRCode;
+            const modules = matrix.getModuleCount();
+            const scale = Math.max(4, Math.floor(210 / modules));
+            canvas.width = canvas.height = modules * scale;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = '#000000';
+            for (let row = 0; row < modules; row++) {
+                for (let column = 0; column < modules; column++) {
+                    if (matrix.isDark(row, column)) context.fillRect(column * scale, row * scale, scale, scale);
+                }
+            }
+            el.qrModal.classList.toggle('qr-expanded', canvas.width > 210);
+        }
         // QRCode.js mirrors its input into title; the canvas is sufficient.
         el.qrContainer.removeAttribute('title');
         el.qrModal.showModal();

@@ -5,7 +5,7 @@ umask 077
 
 REPO_URL="https://github.com/jakubgt/homelab-vault-gen.git"
 API_ROOT="https://api.github.com/repos/jakubgt/homelab-vault-gen"
-RELEASE_VERSION="2.2.1"
+RELEASE_VERSION="2.3.0"
 PINNED_INSTALLER_PROTOCOL=2
 WEB_ROOT="/srv/homelab-vault"
 SITE_PARENT="${WEB_ROOT%/*}"
@@ -513,9 +513,12 @@ for required_file in \
     words.js \
     qrcode.min.js \
     version.js \
+    manifest.webmanifest \
     LICENSE \
     THIRD_PARTY_NOTICES.md \
     assets/vault-icon.png \
+    assets/icon-192.png \
+    assets/icon-512.png \
     install-caddy-lxc.sh
 do
     if [ ! -f "${SOURCE_DIR}/${required_file}" ] || [ -L "${SOURCE_DIR}/${required_file}" ]; then
@@ -592,6 +595,7 @@ install -o root -g caddy -m 0640 \
     "${SOURCE_DIR}/qrcode.min.js" \
     "${SOURCE_DIR}/LICENSE" \
     "${SOURCE_DIR}/THIRD_PARTY_NOTICES.md" \
+    "${SOURCE_DIR}/manifest.webmanifest" \
     "$SITE_STAGE/"
 install -o root -g caddy -m 0640 /dev/null "${SITE_STAGE}/version.js"
 printf "globalThis.VAULT_BUILD = Object.freeze({ version: '%s', commit: '%s' });\n" \
@@ -599,7 +603,9 @@ printf "globalThis.VAULT_BUILD = Object.freeze({ version: '%s', commit: '%s' });
 install -d -o root -g caddy -m 0750 "${SITE_STAGE}/assets"
 install -o root -g caddy -m 0640 \
     "${SOURCE_DIR}/assets/vault-icon.png" \
-    "${SITE_STAGE}/assets/vault-icon.png"
+    "${SOURCE_DIR}/assets/icon-192.png" \
+    "${SOURCE_DIR}/assets/icon-512.png" \
+    "${SITE_STAGE}/assets/"
 install -o root -g root -m 0600 /dev/null "${SITE_STAGE}/${WEB_MARKER}"
 printf '%s\n' 'Managed by Homelab Vault.' >"${SITE_STAGE}/${WEB_MARKER}"
 install -o root -g root -m 0600 /dev/null "${SITE_STAGE}/${DEPLOYMENT_FILE}"

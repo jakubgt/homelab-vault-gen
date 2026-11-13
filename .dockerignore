@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!nginx.conf
+!index.html
+!styles.css
+!core.js
+!app.js
+!words.js
+!qrcode.min.js
+!version.js
+!LICENSE
+!THIRD_PARTY_NOTICES.md
+!manifest.webmanifest
+!assets/
+!assets/vault-icon.png
+!assets/icon-192.png
+!assets/icon-512.png

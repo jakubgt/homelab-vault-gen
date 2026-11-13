@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Generate passwords, passphrases, usernames, and patterned credentials locally with the Web Crypto API.">
+    <meta name="description" content="Generate passwords, passphrases, usernames, patterned credentials, and raw Hex or Base64 secrets locally with the Web Crypto API.">
     <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#0b1220">
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Homelab Vault Generator</title>
     <link rel="icon" href="assets/vault-icon.png">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -33,6 +36,7 @@
             <button type="button" id="tab-pass" class="tab-btn" role="tab" aria-selected="false" aria-controls="pass-options" tabindex="-1">Passphrase</button>
             <button type="button" id="tab-user" class="tab-btn" role="tab" aria-selected="false" aria-controls="user-options" tabindex="-1">Username</button>
             <button type="button" id="tab-pattern" class="tab-btn" role="tab" aria-selected="false" aria-controls="pattern-options" tabindex="-1">Pattern</button>
+            <button type="button" id="tab-raw" class="tab-btn" role="tab" aria-selected="false" aria-controls="raw-options" tabindex="-1">Raw secret</button>
         </div>
 
         <div id="insecure-warning" class="warning-banner hidden" role="alert">
@@ -52,6 +56,8 @@
                     <option value="friendly">Config-friendly · 24 characters</option>
                     <option value="passphrase">Readable passphrase · 6 words</option>
                     <option value="pin">Numeric PIN · 6 digits</option>
+                    <option value="raw-hex">Raw secret · 32 bytes · Hex</option>
+                    <option value="raw-base64">Raw secret · 32 bytes · Base64</option>
                 </optgroup>
                 <optgroup label="Saved on this device" id="saved-profiles"></optgroup>
             </select>
@@ -198,6 +204,25 @@
                 </div>
             </section>
 
+            <section id="raw-options" class="options-grid raw-options" role="tabpanel" aria-labelledby="tab-raw" hidden>
+                <div class="opt-col">
+                    <label class="field-label" for="raw-byte-length">Random bytes</label>
+                    <select id="raw-byte-length">
+                        <option value="32">32 bytes · 256 bits</option>
+                        <option value="64">64 bytes · 512 bits</option>
+                    </select>
+                </div>
+                <div class="opt-col">
+                    <label class="field-label" for="raw-encoding">Encoding</label>
+                    <select id="raw-encoding">
+                        <option value="hex">Hex (lowercase)</option>
+                        <option value="base64">Base64 (padded)</option>
+                        <option value="base64url">Base64url (unpadded)</option>
+                    </select>
+                </div>
+                <p class="full-width-opt opt-desc no-indent">Generates random bytes for application secrets and tokens. Encoding changes the character count, not the entropy. Check the receiving application's required byte length and format.</p>
+            </section>
+
             <section class="settings-panel" aria-labelledby="privacy-title">
                 <h2 id="privacy-title">Privacy &amp; output</h2>
 
@@ -253,6 +278,7 @@
         <details class="about-panel">
             <summary>About &amp; status</summary>
             <p id="build-info"></p><p id="connection-info"></p>
+            <p>Created by <a href="https://github.com/jakubgt" class="text-link" target="_blank" rel="noopener noreferrer">@jakubgt</a> · <a href="https://github.com/jakubgt/homelab-vault-gen" class="text-link" target="_blank" rel="noopener noreferrer">Project on GitHub</a></p>
             <p>Generated credentials stay in this browser until you copy, scan, or export them. No telemetry or automatic update requests.</p>
             <p><a href="LICENSE" class="text-link">License</a> · <a href="THIRD_PARTY_NOTICES.md" class="text-link">Third-party notices</a></p>
         </details>

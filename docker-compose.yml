@@ -19,6 +19,7 @@ services:
       - ./words.js:/usr/share/nginx/html/words.js:ro
       - ./qrcode.min.js:/usr/share/nginx/html/qrcode.min.js:ro
       - ./version.js:/usr/share/nginx/html/version.js:ro
+      - ./manifest.webmanifest:/usr/share/nginx/html/manifest.webmanifest:ro
       - ./LICENSE:/usr/share/nginx/html/LICENSE:ro
       - ./THIRD_PARTY_NOTICES.md:/usr/share/nginx/html/THIRD_PARTY_NOTICES.md:ro
       - ./assets:/usr/share/nginx/html/assets:ro

@@ -66,15 +66,26 @@ async function downloadText(download) {
     return Buffer.concat(chunks).toString('utf8');
 }
 
+async function decodeQr(page) {
+    const pixels = await page.locator('#qr-container canvas').evaluate((canvas) => ({
+        width: canvas.width,
+        height: canvas.height,
+        data: Array.from(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data),
+    }));
+    return jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
+}
+
 test('serves hardened headers and generates each mode', async ({ page }) => {
     const response = await page.goto('/');
     const headers = response.headers();
     expect(headers['content-security-policy']).toContain("default-src 'none'");
     expect(headers['content-security-policy']).not.toContain('unsafe-inline');
+    expect(headers['content-security-policy']).toContain("connect-src 'none'");
+    expect(headers['content-security-policy']).toContain("manifest-src 'self'");
     expect(headers['cache-control']).toContain('no-store');
     expect(headers['x-content-type-options']).toBe('nosniff');
     await expect(page.locator('#result')).toHaveText(/.{24}/);
-    for (const mode of ['pass', 'user', 'pattern', 'pwd']) {
+    for (const mode of ['pass', 'user', 'pattern', 'raw', 'pwd']) {
         await page.locator(`#tab-${mode}`).click();
         await expect(page.locator(`#tab-${mode}`)).toHaveAttribute('aria-selected', 'true');
         await expect(page.locator('#result')).not.toBeEmpty();
@@ -88,7 +99,7 @@ test('tab keyboard navigation updates selection and active panel', async ({ page
     await expect(page.locator('#tab-pass')).toBeFocused();
     await expect(page.locator('#pass-options')).toBeVisible();
     await page.keyboard.press('End');
-    await expect(page.locator('#tab-pattern')).toBeFocused();
+    await expect(page.locator('#tab-raw')).toBeFocused();
     await page.keyboard.press('Home');
     await expect(page.locator('#tab-pwd')).toBeFocused();
 });
@@ -105,6 +116,80 @@ test('invalid pattern removes the old result and disables transfer controls', as
     await page.locator('#pattern-input').fill('[A-Z]{3}-[0-9]{4}');
     await expect(page.locator('#result')).toHaveText(/^[A-Z]{3}-\d{4}$/);
     await expect(page.locator('#generation-error')).toBeHidden();
+});
+
+test('raw secrets encode the selected number of random bytes without losing entropy', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#tab-raw').click();
+    for (const byteLength of [32, 64]) {
+        await page.locator('#raw-byte-length').selectOption(String(byteLength));
+        for (const encoding of ['hex', 'base64', 'base64url']) {
+            await page.locator('#raw-encoding').selectOption(encoding);
+            const secret = await page.locator('#result').textContent();
+            const bytes = Buffer.from(secret, encoding);
+            expect(bytes.length).toBe(byteLength);
+            expect(bytes.toString(encoding)).toBe(secret);
+            await expect(page.locator('#entropy-text')).toHaveText(`Entropy: ${byteLength * 8} bits`);
+            if (encoding === 'hex') expect(secret).toMatch(new RegExp(`^[0-9a-f]{${byteLength * 2}}$`));
+            if (encoding === 'base64') expect(secret).toMatch(/^[A-Za-z0-9+/]+={1,2}$/);
+            if (encoding === 'base64url') expect(secret).toMatch(/^[A-Za-z0-9_-]+$/);
+        }
+    }
+});
+
+test('raw settings and saved presets survive reload without storing a generated secret', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#tab-raw').click();
+    await page.locator('#raw-byte-length').selectOption('64');
+    await page.locator('#raw-encoding').selectOption('base64url');
+    const secret = await page.locator('#result').textContent();
+    await page.locator('.preset-panel > summary').click();
+    await page.locator('#profile-name').fill('64 random bytes as base64url');
+    await page.locator('#profile-save-btn').click();
+    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+    expect(stored).not.toContain(secret);
+    await page.reload();
+    await expect(page.locator('#tab-raw')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#raw-byte-length')).toHaveValue('64');
+    await expect(page.locator('#raw-encoding')).toHaveValue('base64url');
+    await page.locator('.preset-panel > summary').click();
+    await page.locator('#profile-select').selectOption('raw-hex');
+    await expect(page.locator('#raw-byte-length')).toHaveValue('32');
+    await expect(page.locator('#raw-encoding')).toHaveValue('hex');
+    await expect(page.locator('#result')).toHaveText(/^[0-9a-f]{64}$/);
+    await page.locator('#profile-select').selectOption('raw-base64');
+    await expect(page.locator('#result')).toHaveText(/^[A-Za-z0-9+/]{43}=$/);
+    await page.locator('#profile-select').selectOption('saved:0');
+    await expect(page.locator('#raw-byte-length')).toHaveValue('64');
+    await expect(page.locator('#raw-encoding')).toHaveValue('base64url');
+    await expect(page.locator('#result')).toHaveText(/^[A-Za-z0-9_-]{86}$/);
+});
+
+test('raw bulk export preserves independent exact bytes and Paranoid prevents export', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#tab-raw').click();
+    await page.locator('#raw-byte-length').selectOption('64');
+    await page.locator('#raw-encoding').selectOption('base64');
+    await openBulk(page, 3);
+    const pending = page.waitForEvent('download');
+    await page.locator('#export-json-btn').click();
+    const values = JSON.parse(await downloadText(await pending));
+    expect(values).toHaveLength(3);
+    expect(new Set(values).size).toBe(3);
+    for (const value of values) {
+        expect(Buffer.from(value, 'base64').length).toBe(64);
+        expect(Buffer.from(value, 'base64').toString('base64')).toBe(value);
+    }
+    const secret = await page.locator('#result').textContent();
+    await page.locator('#opt-paranoid').check();
+    await expect(page.locator('#result')).toHaveText('Credential hidden');
+    expect(await page.locator('body').ariaSnapshot()).not.toContain(secret);
+    for (const id of ['export-txt-btn', 'export-csv-btn', 'export-json-btn']) {
+        await expect(page.locator(`#${id}`)).toBeDisabled();
+    }
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await expect(page.locator('#result')).toBeEmpty();
+    expect(await page.evaluate(() => localStorage.getItem('vault_settings'))).toBeNull();
 });
 
 test('Paranoid hides plaintext from both DOM and accessible output until reveal', async ({ page }) => {
@@ -326,12 +411,7 @@ test('QR encodes the exact credential and removes all generated nodes on close',
     await page.locator('#qr-btn').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#qr-modal')).toBeVisible();
-    const pixels = await page.locator('#qr-container canvas').evaluate((canvas) => ({
-        width: canvas.width,
-        height: canvas.height,
-        data: Array.from(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data),
-    }));
-    const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
+    const decoded = await decodeQr(page);
     expect(decoded && decoded.data).toBe(secret);
     await expect(page.locator('#qr-container')).not.toHaveAttribute('title');
     await page.keyboard.press('Escape');
@@ -339,6 +419,19 @@ test('QR encodes the exact credential and removes all generated nodes on close',
     await expect(page.locator('#qr-container')).toBeEmpty();
     await expect(page.locator('#qr-btn')).toBeFocused();
 });
+
+for (const length of [128, 150, 512, 1000]) {
+    test(`QR decodes a full ${length}-character credential exactly`, async ({ page }) => {
+        await page.goto('/');
+        await pattern(page, `[A-Za-z0-9]{${length}}`);
+        const secret = await page.locator('#result').textContent();
+        expect(secret).toHaveLength(length);
+        await page.locator('#qr-btn').click();
+        await expect(page.locator('#qr-modal')).toBeVisible();
+        const decoded = await decodeQr(page);
+        expect(decoded && decoded.data).toBe(secret);
+    });
+}
 
 test('QR has four modules of white margin in the dark theme', async ({ page }) => {
     await page.goto('/');
@@ -468,7 +561,7 @@ test('320px layout keeps all modes, expanded settings and the QR inside the view
     for (const summary of ['.preset-panel > summary', '.export-panel > summary', '.about-panel > summary', '#allowed-characters > summary']) {
         await page.locator(summary).click();
     }
-    for (const mode of ['pwd', 'pass', 'user', 'pattern']) {
+    for (const mode of ['raw', 'pwd', 'pass', 'user', 'pattern']) {
         await page.locator(`#tab-${mode}`).click();
         if (mode === 'pattern') await page.locator('#pattern-input').fill('[A-Z]{512}');
         const dimensions = await page.evaluate(() => ({
@@ -501,12 +594,73 @@ test('320px layout keeps all modes, expanded settings and the QR inside the view
     await expect(page.locator('#qr-modal')).not.toBeVisible();
 });
 
+test('install manifest stays local and its advertised icons have the correct dimensions', async ({ page }) => {
+    await page.goto('/');
+    const manifestLink = page.locator('link[rel="manifest"]');
+    await expect(manifestLink).toHaveAttribute('href', 'manifest.webmanifest');
+    const manifestUrl = new URL(await manifestLink.getAttribute('href'), page.url());
+    const response = await page.request.get(manifestUrl.href);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toContain('application/manifest+json');
+    const manifest = await response.json();
+    expect(manifest.name).toBe('Homelab Vault');
+    expect(manifest.display).toBe('standalone');
+    for (const target of [manifest.id, manifest.start_url, manifest.scope, ...manifest.shortcuts.map((shortcut) => shortcut.url)]) {
+        expect(new URL(target, manifestUrl).origin).toBe(new URL(page.url()).origin);
+    }
+    expect(manifest.icons.map((icon) => icon.sizes)).toEqual(expect.arrayContaining(['192x192', '512x512']));
+    for (const icon of manifest.icons) {
+        const iconUrl = new URL(icon.src, manifestUrl);
+        expect(iconUrl.origin).toBe(new URL(page.url()).origin);
+        const dimensions = await page.evaluate(async (url) => {
+            const image = new Image();
+            image.src = url;
+            await image.decode();
+            return `${image.naturalWidth}x${image.naturalHeight}`;
+        }, iconUrl.href);
+        expect(dimensions).toBe(icon.sizes);
+    }
+    const registrations = await page.evaluate(async () => (
+        navigator.serviceWorker ? (await navigator.serviceWorker.getRegistrations()).map((entry) => entry.scope) : []
+    ));
+    expect(registrations).toEqual([]);
+});
+
+test('320px layout contains an expanded QR for a 1000-character credential', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 780 });
+    await page.goto('/');
+    await pattern(page, '[A-Za-z0-9]{1000}');
+    const secret = await page.locator('#result').textContent();
+    await page.locator('#qr-btn').click();
+    await expect(page.locator('#qr-modal')).toBeVisible();
+    const dimensions = await page.locator('#qr-modal').evaluate((dialog) => {
+        const bounds = dialog.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, width: dialog.clientWidth, content: dialog.scrollWidth };
+    });
+    expect(dimensions.left).toBeGreaterThanOrEqual(0);
+    expect(dimensions.right).toBeLessThanOrEqual(320);
+    expect(dimensions.content).toBeLessThanOrEqual(dimensions.width + 1);
+    const decoded = await decodeQr(page);
+    expect(decoded && decoded.data).toBe(secret);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#qr-modal')).not.toBeVisible();
+});
+
 test('About shows build and connection status with working local license links', async ({ page }) => {
     await page.goto('/');
     await page.locator('.about-panel > summary').click();
     await expect(page.locator('#build-info')).toContainText(`Version ${version}`);
     await expect(page.locator('#connection-info')).toHaveText('Connection: loopback HTTP');
     await expect(page.locator('#delivery-warning')).toBeHidden();
+    for (const [name, href] of [
+        ['@jakubgt', 'https://github.com/jakubgt'],
+        ['Project on GitHub', 'https://github.com/jakubgt/homelab-vault-gen'],
+    ]) {
+        const link = page.getByRole('link', { name, exact: true });
+        await expect(link).toHaveAttribute('href', href);
+        await expect(link).toHaveAttribute('target', '_blank');
+        await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
     for (const [name, filename, expectedContent] of [
         ['License', 'LICENSE', 'MIT License'],
         ['Third-party notices', 'THIRD_PARTY_NOTICES.md', 'QRCode'],

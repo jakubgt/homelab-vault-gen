@@ -1,0 +1,34 @@
+{
+  "id": "./",
+  "name": "Homelab Vault",
+  "short_name": "Homelab Vault",
+  "description": "Generate credentials and raw secrets locally in your browser.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start in Paranoid Mode",
+      "short_name": "Paranoid Mode",
+      "url": "./#paranoid"
+    }
+  ]
+}

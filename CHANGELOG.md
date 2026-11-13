@@ -1,3 +1,24 @@
+# v2.3.0 — Raw secrets and deployment conveniences
+
+## Added
+
+- Raw secret mode generates 32 or 64 cryptographically random bytes as lowercase Hex, padded Base64, or unpadded Base64URL. Encoding changes the representation, not the 256- or 512-bit entropy. It works with presets, Paranoid Mode, local QR transfer, and exact-value exports.
+- A dependency-free Node.js CLI reuses the browser's generation core for passwords, passphrases, usernames, patterns, and raw secrets.
+- A minimal runtime-only Docker image, an image-based Compose example, and guarded owner-driven multi-platform GHCR publication tooling. Regular validation remains read-only.
+- A web app manifest and 192/512-pixel icons support standalone installation on compatible HTTPS/loopback browsers. No service worker or persistent application cache is introduced; use the verified local ZIP for air-gapped use.
+- Updated the application, favicon, and README with the new icon, and linked the author's GitHub profile and repository in About & status.
+
+## Verification and documentation
+
+- Check the parsed NGINX and Caddy CSP directives for consistency, with explicit blocked connections and same-origin manifests.
+- Cover raw encodings, CLI behavior, manifest assets, longer QR payloads, and deployment file exposure.
+- Add README navigation, release badge, dashboard configuration, and context-specific Docker Compose escaping guidance.
+- Include the new runtime assets and CLI in deterministic release archives and LXC installations.
+
+The owner release process and updater protocol 2 remain in place. A source update does not publish a GitHub release or a registry image automatically.
+
+---
+
 # v2.2.1 — Release and updater trust
 
 This security maintenance release makes publication an explicit owner action and prevents the updater from executing installers selected through unreviewed or mutable tags.

@@ -84,6 +84,79 @@ test('random integer accepts inclusive maximum bound and rejects invalid sources
     assert.throws(() => core.getSecureRandomInt(2, null));
 });
 
+test('raw secrets encode and decode the exact requested random bytes in every format', () => {
+    for (const byteLength of [32, 64]) {
+        const expected = Uint8Array.from({ length: byteLength }, (_, index) => (index * 73 + 251) & 255);
+        for (const encoding of ['hex', 'base64', 'base64url']) {
+            let calls = 0;
+            let working;
+            const randomSource = {
+                getRandomValues(target) {
+                    calls++;
+                    assert.ok(target instanceof Uint8Array);
+                    assert.equal(target.length, byteLength);
+                    working = target;
+                    target.set(expected);
+                    return target;
+                }
+            };
+            const encoded = core.generateRawSecretBytes({ byteLength, encoding }, randomSource);
+            assert.ok(encoded instanceof Uint8Array);
+            const text = decode(encoded);
+            assert.equal(text, Buffer.from(expected).toString(encoding));
+            assert.deepEqual(new Uint8Array(Buffer.from(text, encoding)), expected);
+            assert.equal(encoded.length, { hex: byteLength * 2, base64: Math.ceil(byteLength / 3) * 4, base64url: Math.ceil(byteLength * 4 / 3) }[encoding]);
+            if (encoding === 'base64url') assert.match(text, /^[A-Za-z0-9_-]+$/);
+            if (encoding === 'base64') assert.match(text, byteLength === 32 ? /[^=]=$/ : /[^=]==$/);
+            assert.equal(calls, 1, 'Raw bytes require one fill with no sampling or character-class constraints');
+            assert.ok(working.every((value) => value === 0), 'The original raw-byte copy is cleared');
+        }
+    }
+});
+
+test('raw secret defaults preserve leading zero bytes as lowercase hex', () => {
+    const encoded = core.generateRawSecretBytes(undefined, {
+        getRandomValues(target) { target.fill(0); target[target.length - 1] = 15; return target; }
+    });
+    assert.equal(decode(encoded), '0'.repeat(63) + 'f');
+});
+
+test('raw secret encoding runs without Node Buffer or browser btoa', () => {
+    const sandbox = {};
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8'), sandbox);
+    const randomSource = { getRandomValues(target) { target.fill(255); return target; } };
+    assert.equal(decode(sandbox.VaultCore.generateRawSecretBytes({ byteLength: 32, encoding: 'base64' }, randomSource)), Buffer.alloc(32, 255).toString('base64'));
+    assert.equal(decode(sandbox.VaultCore.generateRawSecretBytes({ byteLength: 64, encoding: 'base64url' }, randomSource)), Buffer.alloc(64, 255).toString('base64url'));
+});
+
+test('raw secret validation fails before requesting randomness', () => {
+    const randomSource = { getRandomValues() { assert.fail('Invalid options must not consume randomness'); } };
+    for (const options of [null, [], 'hex', 32]) {
+        assert.throws(() => core.generateRawSecretBytes(options, randomSource), TypeError);
+    }
+    for (const byteLength of [0, 16, 31, 33, 63, 65, -1, NaN, Infinity, 32.5, '32', null]) {
+        assert.throws(() => core.generateRawSecretBytes({ byteLength }, randomSource), RangeError);
+    }
+    for (const encoding of ['', 'HEX', 'utf8', 'base64-url', null, 64]) {
+        assert.throws(() => core.generateRawSecretBytes({ encoding }, randomSource), RangeError);
+    }
+    for (const source of [null, {}, { getRandomValues: true }]) {
+        assert.throws(() => core.generateRawSecretBytes({}, source), /cryptographically secure random source/);
+    }
+});
+
+test('raw secret generation propagates random-source errors and clears a partial fill', () => {
+    let working;
+    assert.throws(() => core.generateRawSecretBytes({}, {
+        getRandomValues(target) {
+            working = target;
+            target.fill(123);
+            throw new Error('Random source failed');
+        }
+    }), /Random source failed/);
+    assert.ok(working.every((value) => value === 0));
+});
+
 test('passphrases preserve title capitalization and every fixed separator', () => {
     for (const separator of ['-', '_', '.', ' ']) {
         generated(core.generatePassphraseBytes, { ...phrase, separator }, ['Alpha', 'Bravo', 'Charlie'].join(separator), [0, 1, 2]);
