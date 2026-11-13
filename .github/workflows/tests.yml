@@ -54,6 +54,7 @@ jobs:
       - name: Verify release packaging
         run: |
           python3 tests/test-release.py
+          python3 tests/test-verify-release.py
           python3 tests/test-publish-release.py
           python3 tests/test-repository-security.py
           python3 tests/test-container.py

@@ -72,6 +72,20 @@ Download the versioned `homelab-vault-gen-vX.Y.Z.zip` from [the latest published
 
 You can also clone the repository and open `index.html`. A source checkout displays its version with “source checkout”; packaged and LXC installations display a commit. Checksums detect accidental corruption; obtain the checksum and release through a trusted GitHub connection.
 
+### Automatically verify a download
+
+Save the release ZIP, matching `.manifest.json`, and `SHA256SUMS` together in one directory. From a trusted source checkout or an earlier verified release, run the bundled verifier with Python 3.10 or newer:
+
+```bash
+python3 -I scripts/verify-release.py --directory /path/to/downloads --version 2.3.0
+```
+
+On Windows, use `python` in place of `python3` and pass your download directory. The command reports success only when both downloaded files match `SHA256SUMS`, the external and embedded manifests agree, and every archived file matches its declared size and SHA-256. It rejects unsafe or duplicate paths and never extracts or executes archive contents. Add `--commit FULL_40_CHARACTER_COMMIT_SHA` to require a reviewed source revision.
+
+To check an extracted copy against the same downloaded release, also pass `--extracted /path/to/extracted`. Extra files in that directory are outside the manifest's guarantees. Release CI runs the verifier automatically before uploading build artifacts, and the owner publisher independently reproduces files and checks uploaded digests before publication. A separate read-only workflow downloads and verifies each published stable immutable release; it can also be run manually for a version tag.
+
+Use a verifier obtained through a trusted channel. Matching checksums establish consistency, not independent authenticity: someone able to replace both the files and their checksums can produce a matching set. A published immutable GitHub release over authenticated HTTPS remains part of the trust boundary.
+
 ### Loopback development server
 
 ```bash
@@ -338,6 +352,7 @@ python3 tests/test-release.py
 python3 tests/test-publish-release.py
 python3 tests/test-repository-security.py
 python3 tests/test-container.py
+python3 tests/test-verify-release.py
 ```
 
 The shell harness exercises actual temporary-directory rollback and real temporary Git histories, with network/service/package operations replaced by fixtures. It rejects off-main installers before execution and tests release metadata failures. GitHub Actions checks Node.js 22 and 24, the three browser engines, installer syntax and rollback, actual container startup and response headers, deterministic packaging, and owner-publishing/security-configuration guards. The required `test` check passes only when every validation job succeeds. Dependabot checks GitHub Actions, Docker Compose, and npm development dependencies monthly. A version.js change on main runs the full suite and prepares release artifacts with read-only repository permissions; publication is manual.
@@ -369,6 +384,7 @@ These GitHub settings are external to Git and must be configured separately; com
 | `tests/browser.spec.js`, `playwright.config.js` | Browser regressions and engine matrix |
 | `tests/test-installer.sh`, `tests/test-release.py` | Rollback and release packaging tests |
 | `scripts/build-release.py` | Deterministic offline ZIP and checksum/manifest builder |
+| `scripts/verify-release.py` | Read-only checksum, archive, and optional extracted-file verification |
 | `scripts/publish-release.py` | Owner-only manual publishing with protected-main, test, tag, and immutability checks |
 | `scripts/configure-repository-security.py`, `.github/security/` | Explicit GitHub protection setup and read-only verification |
 | `docs/RELEASING.md` | Owner release procedure and trust boundaries |

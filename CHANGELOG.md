@@ -14,6 +14,7 @@
 - Cover raw encodings, CLI behavior, manifest assets, longer QR payloads, and deployment file exposure.
 - Add README navigation, release badge, dashboard configuration, and context-specific Docker Compose escaping guidance.
 - Include the new runtime assets and CLI in deterministic release archives and LXC installations.
+- Automatically verify built release checksums and every ZIP entry before CI uploads artifacts. A read-only standalone checker also validates downloaded releases and optional extracted copies without executing archive content.
 
 The owner release process and updater protocol 2 remain in place. A source update does not publish a GitHub release or a registry image automatically.
 

@@ -1,0 +1,158 @@
+name: Verify published release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published immutable release tag (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-published-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'jakubgt/homelab-vault-gen'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_HOST: github.com
+      GH_PROMPT_DISABLED: '1'
+      REQUESTED_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      EVENT_RELEASE_ID: ${{ github.event.release.id || '' }}
+    steps:
+      - name: Pin the verifier to protected main
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, subprocess
+
+          if os.environ['GITHUB_REPOSITORY'] != 'jakubgt/homelab-vault-gen':
+              raise SystemExit('Unexpected repository.')
+          tag = os.environ['REQUESTED_TAG']
+          if not re.fullmatch(r'v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)', tag):
+              raise SystemExit('Select one stable release tag in vX.Y.Z form.')
+          environment = dict(os.environ, GH_HOST='github.com')
+          environment.pop('GH_DEBUG', None)
+          result = subprocess.run(
+              ['gh', 'api', '--hostname', 'github.com', '--method', 'GET',
+               'repos/jakubgt/homelab-vault-gen/branches/main'],
+              check=True, capture_output=True, text=True, env=environment)
+          branch = json.loads(result.stdout)
+          commit = branch.get('commit', {}).get('sha', '')
+          if branch.get('name') != 'main' or branch.get('protected') is not True or not re.fullmatch(r'[0-9a-f]{40}', commit):
+              raise SystemExit('The verifier must come from protected main at a full commit SHA.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'verifier_sha={commit}\n')
+          PY
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.source.outputs.verifier_sha }}
+          path: verifier-source
+          persist-credentials: false
+      - name: Download immutable release assets and verify their exact bytes
+        shell: bash
+        env:
+          VERIFIER_SHA: ${{ steps.source.outputs.verifier_sha }}
+        run: |
+          set -euo pipefail
+          release_directory="$(mktemp -d "$RUNNER_TEMP/vault-release.XXXXXX")"
+          export RELEASE_DIRECTORY="$release_directory"
+          python3 - <<'PY'
+          import json, os, re, subprocess, sys
+          from pathlib import Path
+          from urllib.parse import quote
+
+          repository = os.environ['GITHUB_REPOSITORY']
+          tag = os.environ['REQUESTED_TAG']
+          verifier_sha = os.environ['VERIFIER_SHA']
+          if repository != 'jakubgt/homelab-vault-gen' or not re.fullmatch(r'v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)', tag):
+              raise SystemExit('Unexpected repository or release tag.')
+          if not re.fullmatch(r'[0-9a-f]{40}', verifier_sha):
+              raise SystemExit('Missing pinned verifier commit.')
+          version = tag[1:]
+          expected_assets = (f'homelab-vault-gen-{tag}.zip', f'homelab-vault-gen-{tag}.manifest.json', 'SHA256SUMS')
+          environment = dict(os.environ, GH_HOST='github.com')
+          environment.pop('GH_DEBUG', None)
+
+          def api(endpoint):
+              result = subprocess.run(
+                  ['gh', 'api', '--hostname', 'github.com', '--method', 'GET',
+                   '-H', 'Accept: application/vnd.github+json',
+                   '-H', 'X-GitHub-Api-Version: 2022-11-28', f'repos/{repository}/{endpoint}'],
+                  check=True, capture_output=True, text=True, env=environment)
+              value = json.loads(result.stdout)
+              if not isinstance(value, dict):
+                  raise SystemExit('Expected one GitHub metadata object.')
+              return value
+
+          def require_pinned_main():
+              branch = api('branches/main')
+              if branch.get('protected') is not True or branch.get('commit', {}).get('sha') != verifier_sha:
+                  raise SystemExit('Protected main moved or protection changed; rerun verification.')
+
+          def tag_commit():
+              reference = api(f'git/ref/tags/{quote(tag, safe="")}')
+              if reference.get('ref') != f'refs/tags/{tag}':
+                  raise SystemExit('The Git tag reference does not match the release.')
+              target = reference.get('object')
+              for _ in range(8):
+                  if not isinstance(target, dict) or not re.fullmatch(r'[0-9a-f]{40}', target.get('sha', '')):
+                      raise SystemExit('Malformed Git tag target.')
+                  if target.get('type') == 'commit':
+                      return target['sha']
+                  if target.get('type') != 'tag':
+                      raise SystemExit('A release tag must resolve to a commit.')
+                  target = api(f'git/tags/{target["sha"]}').get('object')
+              raise SystemExit('Too many annotated Git tag levels.')
+
+          def release_snapshot():
+              release = api(f'releases/tags/{quote(tag, safe="")}')
+              if (release.get('tag_name') != tag or release.get('draft') is not False
+                      or release.get('prerelease') is not False or release.get('immutable') is not True):
+                  raise SystemExit('The release must be published, stable, immutable, and match the selected tag.')
+              release_id = release.get('id')
+              if type(release_id) is not int or release_id < 1:
+                  raise SystemExit('Missing release identity.')
+              event_release_id = os.environ.get('EVENT_RELEASE_ID', '')
+              if event_release_id and str(release_id) != event_release_id:
+                  raise SystemExit('The published event no longer matches this release.')
+              assets = release.get('assets')
+              if not isinstance(assets, list):
+                  raise SystemExit('Release assets are missing.')
+              selected = []
+              for name in expected_assets:
+                  matches = [asset for asset in assets if isinstance(asset, dict) and asset.get('name') == name]
+                  if len(matches) != 1 or matches[0].get('state') != 'uploaded':
+                      raise SystemExit('Each expected release asset must be uploaded exactly once.')
+                  asset = matches[0]
+                  if type(asset.get('size')) is not int or not 0 < asset['size'] <= 128 * 1024 * 1024:
+                      raise SystemExit('Unexpected release asset size.')
+                  selected.append((asset.get('id'), name, asset['size'], asset.get('digest')))
+              return release_id, tag_commit(), selected
+
+          require_pinned_main()
+          before = release_snapshot()
+          directory = Path(os.environ['RELEASE_DIRECTORY'])
+          command = ['gh', 'release', 'download', tag, '--repo', repository, '--dir', str(directory)]
+          for name in expected_assets:
+              command.extend(['--pattern', name])
+          subprocess.run(command, check=True, env=environment)
+          if release_snapshot() != before:
+              raise SystemExit('Release metadata or tag changed during download.')
+          require_pinned_main()
+          verifier = Path(os.environ['GITHUB_WORKSPACE']) / 'verifier-source' / 'scripts' / 'verify-release.py'
+          subprocess.run(
+              [sys.executable, '-I', str(verifier), '--directory', str(directory),
+               '--version', version, '--commit', before[1]], check=True, env=environment)
+          PY

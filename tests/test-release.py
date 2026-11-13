@@ -30,7 +30,7 @@ EXPECTED_FILES = {
     "docker-compose.yml", "docker-compose.image.yml", "docs/CLI.md", "docs/CONTAINERS.md",
     "docs/RELEASING.md", "docs/screenshots/homelab-vault.png",
     "index.html", "install-caddy-lxc.sh", "manifest.webmanifest", "nginx.conf",
-    "qrcode.min.js", "styles.css", "version.js", "words.js", "RELEASE-MANIFEST.json",
+    "qrcode.min.js", "scripts/verify-release.py", "styles.css", "version.js", "words.js", "RELEASE-MANIFEST.json",
 }
 BINARY_FILES = {"assets/vault-icon.png", "assets/icon-192.png", "assets/icon-512.png", "docs/screenshots/homelab-vault.png"}
 
@@ -174,7 +174,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_cli_works_from_another_directory_and_reports_validation_failures(self):
         fixture_script = self.root / "scripts/build-release.py"
-        fixture_script.parent.mkdir()
+        fixture_script.parent.mkdir(exist_ok=True)
         shutil.copyfile(SCRIPT, fixture_script)
         command = [sys.executable, str(fixture_script), "--version", VERSION, "--commit", COMMIT, "--output", "artifacts"]
         result = subprocess.run(command, cwd=self.workspace, capture_output=True, text=True)

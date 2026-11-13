@@ -42,6 +42,7 @@ RELEASE_FILES = (
     "manifest.webmanifest",
     "nginx.conf",
     "qrcode.min.js",
+    "scripts/verify-release.py",
     "styles.css",
     "version.js",
     "words.js",
