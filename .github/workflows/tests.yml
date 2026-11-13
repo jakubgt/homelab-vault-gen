@@ -119,6 +119,22 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
           docker build --build-arg "VAULT_VERSION=$version" --build-arg "VAULT_COMMIT=$VAULT_COMMIT" -t homelab-vault-ci .
           docker run -d --name vault-image-ci --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m -p 127.0.0.1:8081:8080 homelab-vault-ci
+          image_ready=0
+          for readiness_attempt in {1..45}; do
+            image_state="$(docker inspect --format '{{.State.Status}}/{{.State.Health.Status}}' vault-image-ci)"
+            case "$image_state" in
+              running/healthy) image_ready=1; break ;;
+              */unhealthy|exited/*|dead/*)
+                echo "Packaged image failed its startup check: $image_state" >&2
+                exit 1
+                ;;
+            esac
+            sleep 2
+          done
+          if [ "$image_ready" -ne 1 ]; then
+            echo "Packaged image did not become healthy within 90 seconds: $image_state" >&2
+            exit 1
+          fi
           curl --fail --silent --show-error --retry 15 --retry-delay 1 --retry-connrefused --dump-header /tmp/image-headers http://127.0.0.1:8081/ --output /tmp/image-index
           grep -qi "content-security-policy:.*connect-src 'none'" /tmp/image-headers
           grep -qi "content-security-policy:.*manifest-src 'self'" /tmp/image-headers
