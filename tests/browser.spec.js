@@ -142,6 +142,30 @@ test('strength breakdown is keyboard accessible without generating another secre
     await expect(page.locator('#result')).toHaveText(secret);
 });
 
+test('small action and disclosure links remain readable in both themes', async ({ page }) => {
+    await page.goto('/');
+    for (const dark of [false, true]) {
+        if (await page.locator('body').evaluate((body) => body.classList.contains('dark-mode')) !== dark) {
+            await page.locator('#theme-btn').click();
+        }
+        const ratios = await page.evaluate(() => {
+            const luminance = (color) => {
+                const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map((channel) => {
+                    const value = channel / 255;
+                    return value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+                });
+                return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+            };
+            const background = luminance(getComputedStyle(document.querySelector('.container')).backgroundColor);
+            return ['#clear-btn', '#strength-details > summary', '.about-panel .text-link'].map((selector) => {
+                const foreground = luminance(getComputedStyle(document.querySelector(selector)).color);
+                return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+            });
+        });
+        for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+});
+
 test('collapsed privacy settings keep compatibility warnings and Paranoid controls visible', async ({ page }) => {
     await page.goto('/');
     await pattern(page, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');

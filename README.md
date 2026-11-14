@@ -39,12 +39,14 @@ An offline-first password, passphrase, username, pattern, and raw-secret generat
 
 1. Pick Password, Passphrase, Username, Pattern, or Raw secret.
 2. Adjust the options. Each generation setting immediately creates one new value.
-3. Select **Generate** for another value, **Copy** for the clipboard, or **Show QR** for local transfer.
+3. Select **Generate** for another value, **Copy** for the clipboard, or **QR** for local transfer.
 4. Use **Clear now** whenever you finish. After copying, a countdown shows when the displayed result will clear. The app cannot erase OS clipboard history.
+
+The compact layout keeps the result, actions, Paranoid toggle, preset, and basic generation options together. Phones use the **Mode** picker instead of the desktop tab row. Open **Advanced generation**, **Privacy & output**, **Bulk export**, or **About & status** when needed. The strength row's **Details** disclosure shows the estimate breakdown.
 
 Press <kbd>Space</kbd> outside a form control to generate again. The selected mode, preferences, and named presets are stored in this app's `localStorage` keys unless Paranoid Mode is active. Generated results are not saved there. **Pattern literals are settings:** never enter an existing secret in a pattern. Enabling Paranoid Mode removes this app's saved settings, theme, and presets while preserving unrelated origin storage.
 
-**Generation presets** includes strong passwords, alphanumeric, config-friendly, six-word passphrases, and six-digit PINs. A PIN has much less entropy than the password/passphrase defaults; use it only where a target requires a PIN and limits guessing. You can save up to 20 named presets; saving the same name replaces that preset. Presets save settings, not a generated result.
+**Preset** includes strong passwords, alphanumeric, config-friendly, six-word passphrases, and six-digit PINs. A PIN has much less entropy than the password/passphrase defaults; use it only where a target requires a PIN and limits guessing. You can save up to 20 named presets under **Advanced generation**; saving the same name replaces that preset. Presets save settings, not a generated result.
 
 **Target length limit** is an advisory compatibility check. It does not truncate, reject, or filter random outputs, so the generator's distribution is preserved. Adjust the generation options if the result is too long for the target. Password mode's pool preview and Pattern mode's output length describe the selected constraints.
 
