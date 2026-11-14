@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
-const cli = path.join(__dirname, '..', 'cli.cjs');
+const cli = path.join(__dirname, '..', 'cli', 'vault.cjs');
 
 function run(args, input) {
     return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', input, maxBuffer: 2 * 1024 * 1024, timeout: 15000 });
@@ -95,10 +95,17 @@ test('help/version are explicit and version works in the offline runtime layout'
     assert.match(help.stdout, /^Homelab Vault/);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-cli-'));
     try {
-        for (const name of ['cli.cjs', 'core.js', 'words.js', 'version.js']) fs.copyFileSync(path.join(__dirname, '..', name), path.join(temporary, name));
-        const version = spawnSync(process.execPath, [path.join(temporary, 'cli.cjs'), '--version'], { encoding: 'utf8' });
+        for (const name of ['cli/vault.cjs', 'public/core.js', 'public/words.js', 'public/version.js']) {
+            const destination = path.join(temporary, name);
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.copyFileSync(path.join(__dirname, '..', name), destination);
+        }
+        const version = spawnSync(process.execPath, [path.join(temporary, 'cli', 'vault.cjs'), '--version'], { encoding: 'utf8' });
         assert.equal(version.status, 0, version.stderr);
         assert.match(version.stdout, /^\d+\.\d+\.\d+\n$/);
+        const passphrase = spawnSync(process.execPath, [path.join(temporary, 'cli', 'vault.cjs'), 'passphrase'], { encoding: 'utf8', cwd: os.tmpdir() });
+        assert.equal(passphrase.status, 0, passphrase.stderr);
+        assert.match(passphrase.stdout, /^(?:[A-Z][a-z-]*-){5}[A-Z][a-z-]*\n$/);
         assert.ok(!fs.existsSync(path.join(temporary, 'package.json')));
     } finally {
         assert.ok(path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep));

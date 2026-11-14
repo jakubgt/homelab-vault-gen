@@ -5,7 +5,7 @@ umask 077
 
 REPO_URL="https://github.com/jakubgt/homelab-vault-gen.git"
 API_ROOT="https://api.github.com/repos/jakubgt/homelab-vault-gen"
-RELEASE_VERSION="2.3.0"
+RELEASE_VERSION="2.4.0"
 PINNED_INSTALLER_PROTOCOL=2
 WEB_ROOT="/srv/homelab-vault"
 SITE_PARENT="${WEB_ROOT%/*}"
@@ -505,20 +505,20 @@ cmp -s "$0" "${SOURCE_DIR}/install-caddy-lxc.sh" \
     || die "This installer differs from commit ${DEPLOY_COMMIT}. Download the installer from that exact commit, or use homelab-vault-update."
 
 for required_file in \
-    Caddyfile \
-    index.html \
-    styles.css \
-    core.js \
-    app.js \
-    words.js \
-    qrcode.min.js \
-    version.js \
-    manifest.webmanifest \
-    LICENSE \
-    THIRD_PARTY_NOTICES.md \
-    assets/vault-icon.png \
-    assets/icon-192.png \
-    assets/icon-512.png \
+    deploy/Caddyfile \
+    public/index.html \
+    public/styles.css \
+    public/core.js \
+    public/app.js \
+    public/words.js \
+    public/qrcode.min.js \
+    public/version.js \
+    public/manifest.webmanifest \
+    public/LICENSE \
+    public/THIRD_PARTY_NOTICES.md \
+    public/assets/vault-icon.png \
+    public/assets/icon-192.png \
+    public/assets/icon-512.png \
     install-caddy-lxc.sh
 do
     if [ ! -f "${SOURCE_DIR}/${required_file}" ] || [ -L "${SOURCE_DIR}/${required_file}" ]; then
@@ -587,24 +587,24 @@ SITE_STAGE="$(mktemp -d /srv/.homelab-vault.new.XXXXXX)"
 chown root:caddy "$SITE_STAGE"
 chmod 0750 "$SITE_STAGE"
 install -o root -g caddy -m 0640 \
-    "${SOURCE_DIR}/index.html" \
-    "${SOURCE_DIR}/styles.css" \
-    "${SOURCE_DIR}/core.js" \
-    "${SOURCE_DIR}/app.js" \
-    "${SOURCE_DIR}/words.js" \
-    "${SOURCE_DIR}/qrcode.min.js" \
-    "${SOURCE_DIR}/LICENSE" \
-    "${SOURCE_DIR}/THIRD_PARTY_NOTICES.md" \
-    "${SOURCE_DIR}/manifest.webmanifest" \
+    "${SOURCE_DIR}/public/index.html" \
+    "${SOURCE_DIR}/public/styles.css" \
+    "${SOURCE_DIR}/public/core.js" \
+    "${SOURCE_DIR}/public/app.js" \
+    "${SOURCE_DIR}/public/words.js" \
+    "${SOURCE_DIR}/public/qrcode.min.js" \
+    "${SOURCE_DIR}/public/LICENSE" \
+    "${SOURCE_DIR}/public/THIRD_PARTY_NOTICES.md" \
+    "${SOURCE_DIR}/public/manifest.webmanifest" \
     "$SITE_STAGE/"
 install -o root -g caddy -m 0640 /dev/null "${SITE_STAGE}/version.js"
 printf "globalThis.VAULT_BUILD = Object.freeze({ version: '%s', commit: '%s' });\n" \
     "$RELEASE_VERSION" "$DEPLOY_COMMIT" >"${SITE_STAGE}/version.js"
 install -d -o root -g caddy -m 0750 "${SITE_STAGE}/assets"
 install -o root -g caddy -m 0640 \
-    "${SOURCE_DIR}/assets/vault-icon.png" \
-    "${SOURCE_DIR}/assets/icon-192.png" \
-    "${SOURCE_DIR}/assets/icon-512.png" \
+    "${SOURCE_DIR}/public/assets/vault-icon.png" \
+    "${SOURCE_DIR}/public/assets/icon-192.png" \
+    "${SOURCE_DIR}/public/assets/icon-512.png" \
     "${SITE_STAGE}/assets/"
 install -o root -g root -m 0600 /dev/null "${SITE_STAGE}/${WEB_MARKER}"
 printf '%s\n' 'Managed by Homelab Vault.' >"${SITE_STAGE}/${WEB_MARKER}"
@@ -612,7 +612,7 @@ install -o root -g root -m 0600 /dev/null "${SITE_STAGE}/${DEPLOYMENT_FILE}"
 printf 'VERSION=%s\nCOMMIT=%s\nIP=%s\n' "$RELEASE_VERSION" "$DEPLOY_COMMIT" "$VAULT_IP" \
     >"${SITE_STAGE}/${DEPLOYMENT_FILE}"
 
-template="${SOURCE_DIR}/Caddyfile"
+template="${SOURCE_DIR}/deploy/Caddyfile"
 placeholder_count="$(grep -Fc 'https://<LXC_IPV4> {' "$template" || true)"
 guard_count="$(grep -Ec '^[[:space:]]*ip_address_must_be_configured[[:space:]]*$' "$template" || true)"
 [ "$placeholder_count" -eq 1 ] || die "The Caddy template must contain exactly one IP placeholder."

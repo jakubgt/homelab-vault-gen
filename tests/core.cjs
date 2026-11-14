@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
-const core = require('./core.js');
+const core = require('../public/core.js');
 
 const words = ['alpha', 'bravo', 'charlie', 'delta'];
 const decode = (bytes) => new TextDecoder().decode(bytes);
@@ -123,7 +123,7 @@ test('raw secret defaults preserve leading zero bytes as lowercase hex', () => {
 
 test('raw secret encoding runs without Node Buffer or browser btoa', () => {
     const sandbox = {};
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8'), sandbox);
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'core.js'), 'utf8'), sandbox);
     const randomSource = { getRandomValues(target) { target.fill(255); return target; } };
     assert.equal(decode(sandbox.VaultCore.generateRawSecretBytes({ byteLength: 32, encoding: 'base64' }, randomSource)), Buffer.alloc(32, 255).toString('base64'));
     assert.equal(decode(sandbox.VaultCore.generateRawSecretBytes({ byteLength: 64, encoding: 'base64url' }, randomSource)), Buffer.alloc(64, 255).toString('base64url'));
@@ -214,7 +214,7 @@ test('hyphen ambiguity is rejected for hyphen and random passphrase separators',
 });
 
 test('the vendored EFF list remains uniquely decodable with every supported separator', () => {
-    const source = fs.readFileSync(path.join(__dirname, 'words.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'words.js'), 'utf8');
     const dictionary = vm.runInNewContext(`${source}\nWORDS;`);
     const membership = new Set(dictionary);
     assert.equal(dictionary.length, 7776);

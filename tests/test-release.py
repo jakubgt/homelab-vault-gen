@@ -21,18 +21,18 @@ spec = importlib.util.spec_from_file_location("build_release", SCRIPT)
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
-VERSION = "2.2.0"
+VERSION = "2.4.0"
 COMMIT = "0123456789abcdef" * 2 + "01234567"
 EXPECTED_FILES = {
-    "Caddyfile", "CHANGELOG.md", "LICENSE", "README.md", "SECURITY.md",
-    "THIRD_PARTY_NOTICES.md", "app.js", "assets/vault-icon.png", "core.js",
-    "assets/icon-192.png", "assets/icon-512.png", "cli.cjs", ".dockerignore", "Dockerfile",
-    "docker-compose.yml", "docker-compose.image.yml", "docs/CLI.md", "docs/CONTAINERS.md",
-    "docs/RELEASING.md", "docs/screenshots/homelab-vault.png",
-    "index.html", "install-caddy-lxc.sh", "manifest.webmanifest", "nginx.conf",
-    "qrcode.min.js", "scripts/verify-release.py", "styles.css", "version.js", "words.js", "RELEASE-MANIFEST.json",
+    "LICENSE", "README.md", "SECURITY.md", "public/LICENSE",
+    "public/THIRD_PARTY_NOTICES.md", "public/app.js", "public/assets/vault-icon.png", "public/core.js",
+    "public/assets/icon-192.png", "public/assets/icon-512.png", "cli/vault.cjs", ".dockerignore", "deploy/Dockerfile",
+    "docker-compose.yml", "deploy/docker-compose.image.yml", "deploy/Caddyfile", "docs/CLI.md", "docs/CONTAINERS.md",
+    "docs/CHANGELOG.md", "docs/RELEASING.md", "docs/screenshots/homelab-vault.png",
+    "public/index.html", "install-caddy-lxc.sh", "public/manifest.webmanifest", "deploy/nginx.conf",
+    "public/qrcode.min.js", "scripts/verify-release.py", "public/styles.css", "public/version.js", "public/words.js", "RELEASE-MANIFEST.json",
 }
-BINARY_FILES = {"assets/vault-icon.png", "assets/icon-192.png", "assets/icon-512.png", "docs/screenshots/homelab-vault.png"}
+BINARY_FILES = {"public/assets/vault-icon.png", "public/assets/icon-192.png", "public/assets/icon-512.png", "docs/screenshots/homelab-vault.png"}
 
 
 class ReleaseTests(unittest.TestCase):
@@ -52,7 +52,7 @@ class ReleaseTests(unittest.TestCase):
         for name in BINARY_FILES:
             (self.root / name).write_bytes(b"\x89PNG\r\n\x1a\n\x00binary\xff")
         (self.root / "package.json").write_text(json.dumps({"version": VERSION}), encoding="utf-8")
-        (self.root / "version.js").write_text(
+        (self.root / "public/version.js").write_text(
             f"'use strict';\nglobalThis.VAULT_BUILD = Object.freeze({{ version: '{VERSION}', commit: 'source' }});\n",
             encoding="utf-8",
         )
@@ -71,10 +71,10 @@ class ReleaseTests(unittest.TestCase):
     def test_exact_assets_metadata_hashes_and_roundtrip(self):
         paths = self.build(commit=COMMIT.upper())
         self.assertEqual({path.name for path in paths}, {
-            "homelab-vault-gen-v2.2.0.zip", "homelab-vault-gen-v2.2.0.manifest.json", "SHA256SUMS",
+            "homelab-vault-gen-v2.4.0.zip", "homelab-vault-gen-v2.4.0.manifest.json", "SHA256SUMS",
         })
-        archive_path = self.output / "homelab-vault-gen-v2.2.0.zip"
-        external_manifest = (self.output / "homelab-vault-gen-v2.2.0.manifest.json").read_bytes()
+        archive_path = self.output / "homelab-vault-gen-v2.4.0.zip"
+        external_manifest = (self.output / "homelab-vault-gen-v2.4.0.manifest.json").read_bytes()
         manifest = json.loads(external_manifest)
         self.assertEqual(manifest["version"], VERSION)
         self.assertEqual(manifest["commit"], COMMIT)
@@ -84,8 +84,12 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(archive.namelist(), sorted(EXPECTED_FILES))
             self.assertIsNone(archive.testzip())
             self.assertEqual(archive.read("RELEASE-MANIFEST.json"), external_manifest)
-            self.assertIn(f"commit: '{COMMIT}'", archive.read("version.js").decode())
-            self.assertNotIn("commit: 'source'", archive.read("version.js").decode())
+            self.assertIn(f"commit: '{COMMIT}'", archive.read("public/version.js").decode())
+            self.assertNotIn("commit: 'source'", archive.read("public/version.js").decode())
+            self.assertNotIn("index.html", archive.namelist())
+            self.assertNotIn("core.js", archive.namelist())
+            self.assertNotIn("cli.cjs", archive.namelist())
+            self.assertNotIn("CHANGELOG.md", archive.namelist())
             for entry in manifest["files"]:
                 content = archive.read(entry["path"])
                 self.assertEqual(hashlib.sha256(content).hexdigest(), entry["sha256"])
@@ -107,7 +111,7 @@ class ReleaseTests(unittest.TestCase):
         for line in (self.output / "SHA256SUMS").read_text().splitlines():
             expected_hash, name = line.split("  ", 1)
             self.assertEqual(hashlib.sha256((self.output / name).read_bytes()).hexdigest(), expected_hash)
-        self.assertIn("commit: 'source'", (self.root / "version.js").read_text())
+        self.assertIn("commit: 'source'", (self.root / "public/version.js").read_text())
 
     def test_determinism_across_rebuilds_timestamps_modes_and_line_endings(self):
         self.build()
@@ -133,18 +137,24 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse(self.output.exists())
 
     def test_all_three_version_sources_must_match(self):
-        for name in ["package.json", "version.js", "install-caddy-lxc.sh"]:
+        for name in ["package.json", "public/version.js", "install-caddy-lxc.sh"]:
             source = self.root / name
             original = source.read_bytes()
-            source.write_bytes(original.replace(b"2.2.0", b"2.1.0"))
+            source.write_bytes(original.replace(VERSION.encode(), b"2.1.0"))
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, "does not match"):
                 self.build()
             self.assertFalse(self.output.exists())
             source.write_bytes(original)
 
     def test_missing_asset_fails_before_writes(self):
-        (self.root / "assets/vault-icon.png").unlink()
+        (self.root / "public/assets/vault-icon.png").unlink()
         with self.assertRaisesRegex(ValueError, "Missing or unsafe"):
+            self.build()
+        self.assertFalse(self.output.exists())
+
+    def test_served_license_copy_must_match_the_repository_license(self):
+        (self.root / "public/LICENSE").write_text("A different license", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "public/LICENSE copy must match"):
             self.build()
         self.assertFalse(self.output.exists())
 
@@ -179,7 +189,7 @@ class ReleaseTests(unittest.TestCase):
         command = [sys.executable, str(fixture_script), "--version", VERSION, "--commit", COMMIT, "--output", "artifacts"]
         result = subprocess.run(command, cwd=self.workspace, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.workspace / "artifacts/homelab-vault-gen-v2.2.0.zip").is_file())
+        self.assertTrue((self.workspace / "artifacts/homelab-vault-gen-v2.4.0.zip").is_file())
         command[command.index(COMMIT)] = "short"
         result = subprocess.run(command, cwd=self.workspace, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)

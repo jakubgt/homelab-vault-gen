@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs production rollback/ref-resolution functions against temporary fixtures.
+# Runs production source, rollback, and ref-resolution checks against fixtures.
 # Never runs installer main, apt, a real service manager, or any network request.
 set -eu
 
@@ -14,6 +14,35 @@ grep -q '^acquire_install_lock()' "$functions_file"
 
 pass() { printf 'PASS %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
+
+# Exercise the production source allowlist without running installer main.
+# Repository paths changed; deployed paths and rollback metadata stay flat.
+required_files_file="${test_root}/required-source-files.sh"
+sed -n '/^for required_file in \\/,/^done$/p' "${repo_dir}/install-caddy-lxc.sh" >"$required_files_file"
+[ -s "$required_files_file" ] || fail 'production source allowlist was not found'
+organized_source="${test_root}/organized-source"
+mkdir -p "${organized_source}/deploy"
+cp -R "${repo_dir}/public" "${organized_source}/public"
+cp "${repo_dir}/deploy/Caddyfile" "${organized_source}/deploy/Caddyfile"
+cp "${repo_dir}/install-caddy-lxc.sh" "${organized_source}/install-caddy-lxc.sh"
+(
+    # shellcheck disable=SC1090
+    . "$functions_file"
+    SOURCE_DIR=$organized_source
+    # shellcheck disable=SC1090
+    . "$required_files_file"
+) || fail 'organized public/deploy source was rejected'
+mv "${organized_source}/public/core.js" "${organized_source}/core.js"
+if (
+    # shellcheck disable=SC1090
+    . "$functions_file"
+    SOURCE_DIR=$organized_source
+    # shellcheck disable=SC1090
+    . "$required_files_file"
+) >/dev/null 2>&1; then
+    fail 'a legacy root runtime file substituted for missing public/core.js'
+fi
+pass 'installer accepts organized source and rejects missing public runtime assets'
 
 setup_fixture() {
     # This prefix includes constants and functions, but no production actions.

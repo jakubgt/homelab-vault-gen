@@ -15,10 +15,11 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "ghcr.io/jakubgt/homelab-vault-gen"
 CONTEXT_FILES = (
-    "Dockerfile", ".dockerignore", "nginx.conf", "index.html", "styles.css",
-    "core.js", "app.js", "words.js", "qrcode.min.js", "version.js", "LICENSE",
-    "THIRD_PARTY_NOTICES.md", "manifest.webmanifest", "assets/vault-icon.png",
-    "assets/icon-192.png", "assets/icon-512.png",
+    "deploy/Dockerfile", ".dockerignore", "deploy/nginx.conf",
+    "public/index.html", "public/styles.css", "public/core.js", "public/app.js",
+    "public/words.js", "public/qrcode.min.js", "public/version.js", "public/LICENSE",
+    "public/THIRD_PARTY_NOTICES.md", "public/manifest.webmanifest",
+    "public/assets/vault-icon.png", "public/assets/icon-192.png", "public/assets/icon-512.png",
 )
 BASE_PATTERN = r"nginxinc/nginx-unprivileged@sha256:[0-9a-f]{64}"
 
@@ -144,7 +145,8 @@ def publish(root, version, commit, base_image, push=False, client=None, docker=N
         context.mkdir()
         build_context(client, context)
         metadata = temporary / "metadata.json"
-        command = ["buildx", "build", "--platform", "linux/amd64,linux/arm64",
+        command = ["buildx", "build", "--file", str(context / "deploy/Dockerfile"),
+                   "--platform", "linux/amd64,linux/arm64",
                    "--build-arg", f"BASE_IMAGE={base_image}",
                    "--build-arg", f"VAULT_VERSION={version}",
                    "--build-arg", f"VAULT_COMMIT={commit}",

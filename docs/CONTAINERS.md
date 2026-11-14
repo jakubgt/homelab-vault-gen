@@ -1,22 +1,22 @@
 # Prebuilt container images
 
-The Dockerfile packages only the browser runtime, licenses, icons, manifest, and production NGINX configuration. Source management files, installers, tests, and CLI tools are outside the web root. NGINX runs as UID 101 on port 8080. The image is designed for a read-only filesystem with a writable `/tmp` tmpfs, all Linux capabilities dropped, and `no-new-privileges`.
+`deploy/Dockerfile` packages only the browser runtime from `public/` and the production NGINX configuration from `deploy/nginx.conf`. The build context allowlist excludes source management files, installers, tests, CLI tools, and unrelated images. NGINX runs as UID 101 on port 8080. The image is designed for a read-only filesystem with a writable `/tmp` tmpfs, all Linux capabilities dropped, and `no-new-privileges`.
 
-The existing `docker-compose.yml` continues to support a source checkout. To build the packaged image locally for testing:
+The root `docker-compose.yml` continues to support a source checkout: it mounts only `public/` as the web root and reads `deploy/nginx.conf` separately. Root configuration, installer, and test files remain outside the served directory. To build the packaged image from the repository root for testing:
 
 ```bash
-docker build -t homelab-vault-local .
-VAULT_IMAGE=homelab-vault-local docker compose -f docker-compose.image.yml up -d
+docker build -f deploy/Dockerfile -t homelab-vault-local .
+VAULT_IMAGE=homelab-vault-local docker compose -f deploy/docker-compose.image.yml up -d
 ```
 
 Open `http://127.0.0.1:8080`. Use trusted HTTPS through a reverse proxy for access from another device. `VAULT_BIND_ADDRESS` and `VAULT_PORT` work as in the source Compose file. The image Compose file does not require source bind mounts.
 
 ## Deploy a published image
 
-Images are a separate, manual owner publication step after the matching immutable GitHub release. Adding this Dockerfile does not publish an image. Once the owner has published a version, copy `docker-compose.image.yml` to a deployment directory and set `VAULT_IMAGE` to the reported reference:
+Images are a separate, manual owner publication step after the matching immutable GitHub release. Adding this Dockerfile does not publish an image. Once the owner has published a version, copy `deploy/docker-compose.image.yml` to a deployment directory and set `VAULT_IMAGE` to the reported reference. Run these commands from that directory:
 
 ```bash
-export VAULT_IMAGE=ghcr.io/jakubgt/homelab-vault-gen:v2.3.0
+export VAULT_IMAGE=ghcr.io/jakubgt/homelab-vault-gen:v2.4.0
 docker compose -f docker-compose.image.yml pull
 docker compose -f docker-compose.image.yml up -d
 ```
@@ -34,7 +34,7 @@ Use a reviewed, clean checkout of current protected `main`, GitHub CLI authentic
 3. Run the helper without `--push` to build a local OCI archive beside the source checkout, keeping the checkout clean. Use the full reviewed main commit and actual base digest:
 
 ```bash
-python3 -I scripts/publish-container.py --version 2.3.0 \
+python3 -I scripts/publish-container.py --version 2.4.0 \
   --commit FULL_40_CHARACTER_COMMIT_SHA \
   --base-image nginxinc/nginx-unprivileged@sha256:REVIEWED_64_CHARACTER_DIGEST
 ```

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Generate passwords, passphrases, usernames, patterned credentials, and raw Hex or Base64 secrets locally with the Web Crypto API.">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#0b1220">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Homelab Vault Generator</title>
+    <link rel="icon" href="assets/vault-icon.png">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="container">
+        <button type="button" class="theme-toggle" id="theme-btn" aria-label="Use dark theme" aria-pressed="false">☾</button>
+
+        <header class="app-header">
+            <img class="app-icon" src="assets/vault-icon.png" alt="" width="48" height="48">
+            <div>
+                <h1>Homelab Vault</h1>
+                <p>Offline credential generator</p>
+            </div>
+        </header>
+
+        <noscript>
+            <div class="warning-banner">JavaScript is required to generate credentials locally.</div>
+        </noscript>
+
+        <div class="tabs" role="tablist" aria-label="Generator mode">
+            <button type="button" id="tab-pwd" class="tab-btn active" role="tab" aria-selected="true" aria-controls="pwd-options" tabindex="0">Password</button>
+            <button type="button" id="tab-pass" class="tab-btn" role="tab" aria-selected="false" aria-controls="pass-options" tabindex="-1">Passphrase</button>
+            <button type="button" id="tab-user" class="tab-btn" role="tab" aria-selected="false" aria-controls="user-options" tabindex="-1">Username</button>
+            <button type="button" id="tab-pattern" class="tab-btn" role="tab" aria-selected="false" aria-controls="pattern-options" tabindex="-1">Pattern</button>
+            <button type="button" id="tab-raw" class="tab-btn" role="tab" aria-selected="false" aria-controls="raw-options" tabindex="-1">Raw secret</button>
+        </div>
+
+        <div id="insecure-warning" class="warning-banner hidden" role="alert">
+            This browser does not expose <code>crypto.getRandomValues</code>, so generation has been disabled. Use a current version of Chrome, Edge, Firefox, or Safari.
+        </div>
+
+        <div id="delivery-warning" class="warning-banner hidden" role="alert">This page was delivered over unencrypted HTTP. Use trusted HTTPS before generating credentials on another device.</div>
+
+        <div class="mobile-mode">
+            <label for="mode-select">Mode</label>
+            <select id="mode-select" aria-controls="pwd-options pass-options user-options pattern-options raw-options">
+                <option value="pwd">Password</option>
+                <option value="pass">Passphrase</option>
+                <option value="user">Username</option>
+                <option value="pattern">Pattern</option>
+                <option value="raw">Raw secret</option>
+            </select>
+        </div>
+
+        <section class="result-section" aria-labelledby="result-heading">
+            <div class="result-heading">
+                <h2 id="result-heading">Generated credential</h2>
+                <label class="paranoid-toggle"><input type="checkbox" id="opt-paranoid" aria-describedby="paranoid-help"> Paranoid</label>
+            </div>
+            <div id="result-container">
+                <output id="result" aria-label="Generated credential" aria-live="off"></output>
+                <button type="button" id="paranoid-overlay" class="reveal-btn hidden" aria-pressed="false">Reveal</button>
+            </div>
+            <p id="generation-error" class="generation-error hidden" role="alert"></p>
+            <div class="result-status"><span id="output-length">No credential</span><span id="clear-countdown" aria-live="off"></span><button type="button" id="clear-btn" class="text-btn" disabled>Clear now</button></div>
+            <p id="compatibility-warning" class="generation-error hidden" role="status"></p>
+        </section>
+
+        <div class="action-group">
+            <button type="button" class="action-btn" id="generate-btn" title="Press Space outside a control to generate again">Generate</button>
+            <button type="button" class="action-btn success-btn" id="copy-btn" disabled>Copy</button>
+            <button type="button" class="action-btn secondary-btn" id="qr-btn" aria-label="Show QR" disabled>QR</button>
+        </div>
+
+        <section id="metrics-container" aria-label="Credential strength estimate">
+            <div class="stats-row">
+                <span class="visually-hidden">Strength:</span><span id="strength-text" class="strength-weak" aria-live="polite">Weak</span>
+                <span class="visually-hidden">Entropy:</span><span id="entropy-text">0 bits</span>
+            </div>
+            <details id="strength-details" class="strength-details">
+                <summary>Details</summary>
+                <div class="strength-breakdown">
+                    <p id="crack-text">Estimated offline crack time: Instant</p>
+                    <p id="pool-info" class="pool-info"></p>
+                </div>
+            </details>
+            <progress id="entropy-bar" class="entropy-weak" max="128" value="0" aria-label="Entropy in bits"></progress>
+        </section>
+
+        <div class="controls">
+            <div class="preset-row">
+                <label for="profile-select">Preset</label>
+                <select id="profile-select">
+                    <option value="">Custom settings</option>
+                    <optgroup label="Built-in" id="builtin-profiles">
+                        <option value="balanced">Strong password · 24 characters</option>
+                        <option value="alphanumeric">Alphanumeric · 24 characters</option>
+                        <option value="friendly">Config-friendly · 24 characters</option>
+                        <option value="passphrase">Readable passphrase · 6 words</option>
+                        <option value="pin">Numeric PIN · 6 digits</option>
+                        <option value="raw-hex">Raw secret · 32 bytes · Hex</option>
+                        <option value="raw-base64">Raw secret · 32 bytes · Base64</option>
+                    </optgroup>
+                    <optgroup label="Saved on this device" id="saved-profiles"></optgroup>
+                </select>
+            </div>
+            <div class="length-header" id="length-container">
+                <label id="length-label" for="length-num">Length</label>
+                <input type="number" id="length-num" min="4" max="128" value="24" inputmode="numeric" autocomplete="off">
+            </div>
+            <input type="range" id="length" min="4" max="128" value="24" class="full-slider" aria-labelledby="length-label">
+
+            <section id="pwd-options" class="options-grid character-options" role="tabpanel" aria-labelledby="tab-pwd">
+                <label><input type="checkbox" id="opt-upper" checked> Uppercase</label>
+                <label><input type="checkbox" id="opt-lower" checked> Lowercase</label>
+                <label><input type="checkbox" id="opt-nums" checked> Numbers</label>
+                <label><input type="checkbox" id="opt-syms" checked> Symbols</label>
+
+            </section>
+
+            <section id="pattern-options" class="options-grid" role="tabpanel" aria-labelledby="tab-pattern" hidden>
+                <div class="full-width-opt">
+                    <label class="field-label" for="pattern-input">Pattern format</label>
+                    <input type="text" id="pattern-input" class="full-width-input" value="[A-Z]{3}-[0-9]{4}-[a-z]{5}" maxlength="512" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="pattern-help">
+                </div>
+            </section>
+
+            <section id="pass-options" class="options-grid" role="tabpanel" aria-labelledby="tab-pass" hidden>
+                <div class="opt-col">
+                    <div>
+                        <label><input type="checkbox" id="opt-pass-caps" checked> Capitalize words</label>
+                    </div>
+                </div>
+
+                <div class="opt-col">
+                    <div>
+                        <label><input type="checkbox" id="opt-pass-nums"> Insert numbers</label>
+                    </div>
+                </div>
+
+                <div class="full-width-opt">
+                    <label class="label-row" for="opt-pass-sep">Separator</label>
+                    <select id="opt-pass-sep">
+                        <option value="-">Hyphen (-)</option>
+                        <option value="_">Underscore (_)</option>
+                        <option value=".">Period (.)</option>
+                        <option value=" ">Space</option>
+                        <option value="random">Random symbol (+entropy)</option>
+                    </select>
+                </div>
+            </section>
+
+            <section id="user-options" class="options-grid" role="tabpanel" aria-labelledby="tab-user" hidden>
+                <label><input type="checkbox" id="opt-user-lower"> Lowercase username</label>
+                <label><input type="checkbox" id="opt-user-nums" checked> Append numbers</label>
+            </section>
+
+            <section id="raw-options" class="options-grid raw-options" role="tabpanel" aria-labelledby="tab-raw" hidden>
+                <div class="opt-col">
+                    <label class="field-label" for="raw-byte-length">Random bytes</label>
+                    <select id="raw-byte-length">
+                        <option value="32">32 bytes · 256 bits</option>
+                        <option value="64">64 bytes · 512 bits</option>
+                    </select>
+                </div>
+                <div class="opt-col">
+                    <label class="field-label" for="raw-encoding">Encoding</label>
+                    <select id="raw-encoding">
+                        <option value="hex">Hex (lowercase)</option>
+                        <option value="base64">Base64 (padded)</option>
+                        <option value="base64url">Base64url (unpadded)</option>
+                    </select>
+                </div>
+            </section>
+
+            <details id="advanced-generation" class="disclosure">
+                <summary>Advanced generation</summary>
+                <div class="disclosure-body">
+                    <div id="pwd-advanced" class="options-grid">
+                        <div class="full-width-opt">
+                            <label><input type="checkbox" id="opt-ambig"> Avoid ambiguous characters</label>
+                            <p class="opt-desc">Excludes visually similar characters: <code>l I 1 O 0</code>.</p>
+                        </div>
+                        <div class="full-width-opt symbol-options">
+                            <label for="symbol-preset">Symbol set</label>
+                            <select id="symbol-preset">
+                                <option value="default">Default punctuation</option>
+                                <option value="friendly">Config-friendly (._-+=)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <p id="symbol-help" class="opt-desc no-indent">The friendly preset avoids common shell and YAML metacharacters. Always quote credentials in configuration files.</p>
+                            <label for="sym-input" class="visually-hidden">Custom symbols</label>
+                            <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&amp;*()-_=+[]{};:,.&lt;&gt;/?|~" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
+                        </div>
+                        <details id="allowed-characters" class="full-width-opt allowed-characters">
+                            <summary>Allowed characters <span id="allowed-character-count"></span></summary>
+                            <code id="allowed-character-preview" aria-live="polite" aria-atomic="true"></code>
+                            <p class="opt-desc no-indent">Reflects selected character sets and ambiguous-character exclusions.</p>
+                        </details>
+                    </div>
+                    <div id="pass-advanced" class="options-grid" hidden>
+                        <div id="opt-pass-caps-rand-wrapper">
+                            <label><input type="checkbox" id="opt-pass-caps-rand"> Randomize caps</label>
+                            <p class="opt-desc">Capitalizes a random subset of words when capitalization is enabled.</p>
+                        </div>
+                        <div id="pass-num-options-wrapper" class="hidden opt-col">
+                            <label><input type="checkbox" id="opt-pass-nums-rand" checked> Randomize positions</label>
+                            <p class="opt-desc no-indent">Sprinkles digits through the phrase instead of appending them to every word.</p>
+                            <div class="amount-row">
+                                <label class="amount-label" for="pass-num-count">Amount</label>
+                                <input type="number" id="pass-num-count" min="1" max="10" value="2" class="num-mini" inputmode="numeric" autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="user-advanced" class="options-grid" hidden>
+                        <div id="user-num-count-wrapper" class="amount-row">
+                            <label class="amount-label" for="user-num-count">Suffix digits</label>
+                            <input type="number" id="user-num-count" min="1" max="9" value="3" class="num-mini" inputmode="numeric" autocomplete="off">
+                        </div>
+                        <div class="opt-col">
+                            <label for="opt-user-sep">Separator</label>
+                            <select id="opt-user-sep">
+                                <option value="">None</option>
+                                <option value="-">Hyphen (-)</option>
+                                <option value="_">Underscore (_)</option>
+                                <option value=".">Period (.)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="pattern-help" class="opt-desc no-indent" hidden>Use ranges such as <code>[A-Z]</code> and repetition such as <code>{4}</code>. Escape literal brackets or braces with a backslash. Printable ASCII only. Example: <code>[A-Z]{3}-[0-9]{4}-[a-z]{5}</code>.</p>
+                    <p id="raw-help" class="opt-desc no-indent" hidden>Generates random bytes for application secrets and tokens. Encoding changes the character count, not the entropy. Check the receiving application's required byte length and format.</p>
+                    <section class="preset-panel" aria-labelledby="saved-preset-heading">
+                        <h2 id="saved-preset-heading">Save or manage presets</h2>
+                        <div class="setting-row">
+                            <label for="profile-name">Save as</label>
+                            <input id="profile-name" type="text" maxlength="40" placeholder="Preset name" autocomplete="off">
+                            <button id="profile-save-btn" class="secondary-btn bulk-btn" type="button">Save preset</button>
+                            <button id="profile-delete-btn" class="text-btn" type="button" disabled>Delete preset</button>
+                        </div>
+                        <p class="metric-note">Saves settings, including pattern literals, on this device. Never put an existing secret in a pattern. Saved presets are removed when Paranoid mode is enabled.</p>
+                    </section>
+                </div>
+            </details>
+
+            <details id="privacy-options" class="disclosure settings-panel">
+                <summary id="privacy-title">Privacy &amp; output <span id="clear-setting-summary" class="summary-value">Clear after 60s</span></summary>
+                <div class="disclosure-body">
+                    <p id="paranoid-help" class="opt-desc no-indent">Paranoid mode stops preference saving, hides the result, clears it when this tab loses focus, and disables file export.</p>
+                    <a id="paranoid-launch" class="text-link" href="#paranoid">Start in Paranoid mode</a>
+                    <p class="opt-desc no-indent">The address keeps this mode active after reload. Bookmark it for private starts.</p>
+                    <div class="setting-row">
+                        <label for="target-max-length">Target length limit</label>
+                        <input type="number" id="target-max-length" min="1" max="1000" class="num-clear" placeholder="None" inputmode="numeric" autocomplete="off">
+                    </div>
+                    <p class="metric-note">Compatibility check only: reports values that exceed your target's limit. Never truncates or filters generated credentials.</p>
+                    <div class="setting-row">
+                        <label for="clear-time">Clear after copy</label>
+                        <select id="clear-time">
+                            <option value="30000">30 seconds</option>
+                            <option value="60000" selected>60 seconds</option>
+                            <option value="300000">5 minutes</option>
+                            <option value="custom">Custom…</option>
+                        </select>
+                        <label for="custom-clear-time" class="visually-hidden">Custom clear time in seconds</label>
+                        <input type="number" id="custom-clear-time" class="hidden num-clear" min="1" max="86400" placeholder="Seconds" inputmode="numeric" autocomplete="off">
+                    </div>
+                    <button type="button" id="reset-settings-btn" class="text-btn">Reset saved preferences</button>
+                </div>
+            </details>
+
+            <details class="export-panel disclosure">
+                    <summary>Bulk export</summary>
+                    <div class="disclosure-body">
+                    <p>Downloads unencrypted credentials. TXT and JSON preserve exact values. Files are disabled in Paranoid mode.</p>
+                    <div class="setting-row export-row">
+                        <label for="bulk-count">Count</label>
+                        <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50" inputmode="numeric" autocomplete="off">
+                        <button type="button" class="secondary-btn bulk-btn" id="export-csv-btn" disabled>CSV</button>
+                        <button type="button" class="secondary-btn bulk-btn" id="export-txt-btn" disabled>TXT</button>
+                        <button type="button" class="secondary-btn bulk-btn" id="export-json-btn" disabled>JSON</button>
+                    </div>
+                    <div id="bulk-status" class="hidden" role="status"><progress id="bulk-progress" max="100" value="0" aria-label="Bulk generation progress"></progress><span id="bulk-progress-text"></span><button type="button" id="bulk-cancel-btn" class="text-btn">Cancel export</button></div>
+                    </div>
+            </details>
+        </div>
+
+        <details class="about-panel disclosure">
+            <summary>About &amp; status</summary>
+            <p id="build-info"></p><p id="connection-info"></p>
+            <p>Created by <a href="https://github.com/jakubgt" class="text-link" target="_blank" rel="noopener noreferrer">@jakubgt</a> · <a href="https://github.com/jakubgt/homelab-vault-gen" class="text-link" target="_blank" rel="noopener noreferrer">Project on GitHub</a></p>
+            <p>Generated credentials stay in this browser until you copy, scan, or export them. No telemetry or automatic update requests.</p>
+            <p><a href="LICENSE" class="text-link">License</a> · <a href="THIRD_PARTY_NOTICES.md" class="text-link">Third-party notices</a></p>
+        </details>
+    </main>
+
+    <dialog id="qr-modal" aria-labelledby="qr-title" aria-describedby="qr-description">
+        <div class="qr-content">
+            <h2 id="qr-title">Credential QR code</h2>
+            <div id="qr-container" role="img" aria-label="QR code containing the generated credential"></div>
+            <p id="qr-description">Anyone nearby—or any camera app you use—can read this credential. Scan only with a trusted app.</p>
+            <button type="button" class="action-btn" id="qr-close">Close</button>
+        </div>
+    </dialog>
+
+    <dialog id="csv-export-dialog" aria-labelledby="csv-title" aria-describedby="csv-description">
+        <div class="qr-content">
+            <h2 id="csv-title">Import CSV credentials as text</h2>
+            <p id="csv-description">Opening CSV directly in a spreadsheet can execute formulas, remove leading zeros, or round digits. Import the Credential column explicitly as Text. Use TXT or JSON for exact-value interchange.</p>
+            <label><input id="csv-text-ack" type="checkbox"> I will import the Credential column as text.</label>
+            <div class="setting-row"><button type="button" id="csv-export-confirm" class="action-btn" disabled>Export CSV</button><button type="button" id="csv-export-cancel" class="secondary-btn action-btn">Cancel</button></div>
+        </div>
+    </dialog>
+
+    <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="version.js"></script>
+    <script src="qrcode.min.js"></script>
+    <script src="words.js"></script>
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,3 +1,23 @@
+# v2.4.0 — Compact layout and organized source
+
+## App layout
+
+- Use the compact single-column layout on desktop and mobile, with Generate, Copy, and QR beside the credential workflow.
+- Keep essential generation controls, Paranoid status, errors, and countdowns visible. Collapse advanced generation options, privacy/output settings, bulk export, and About until needed.
+- Use an accessible mode picker on narrow screens and a compact strength summary with optional details.
+- Remove the requested guess-rate sentence from the application display.
+
+## Source organization
+
+- Group the complete browser app in `public/`, CLI in `cli/`, deployment configuration in `deploy/`, test tooling in `tests/`, and the changelog in `docs/`.
+- Keep root Compose and LXC installer entry points stable. Installed web addresses and updater protocol 2 continue to work.
+- Update container contexts, installer staging, release packaging, CI, and documentation for the organized tree.
+- Browser source checkouts and v2.4.0+ offline archives open at `public/index.html`. Run the CLI with `node cli/vault.cjs`, and build the image with `docker build -f deploy/Dockerfile .`.
+
+The root listing is shorter because related files are grouped in folders. Existing release tags and assets are unchanged.
+
+---
+
 # v2.3.0 — Raw secrets and deployment conveniences
 
 ## Added

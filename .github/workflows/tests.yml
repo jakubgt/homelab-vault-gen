@@ -47,9 +47,9 @@ jobs:
       - run: npm ci
       - name: Check syntax and core behavior
         run: |
-          node --check core.js
-          node --check app.js
-          node --check version.js
+          node --check public/core.js
+          node --check public/app.js
+          node --check public/version.js
           npm test
       - name: Verify release packaging
         run: |
@@ -108,7 +108,7 @@ jobs:
           for asset in core.js app.js version.js words.js qrcode.min.js styles.css LICENSE THIRD_PARTY_NOTICES.md manifest.webmanifest assets/vault-icon.png assets/icon-192.png assets/icon-512.png; do
             curl --fail --silent --show-error "http://127.0.0.1:8080/$asset" --output /dev/null
           done
-          for private_file in install-caddy-lxc.sh test.js test-core.cjs nginx.conf Caddyfile docker-compose.yml package.json tests/browser.spec.js; do
+          for private_file in install-caddy-lxc.sh docker-compose.yml package.json tests/repository.cjs tests/core.cjs tests/browser.spec.js deploy/nginx.conf deploy/Caddyfile public/index.html; do
             test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:8080/$private_file")" = 404
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/.git/config)" = 403
@@ -118,7 +118,10 @@ jobs:
           VAULT_COMMIT: ${{ github.sha }}
         run: |
           version="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
-          docker build --build-arg "VAULT_VERSION=$version" --build-arg "VAULT_COMMIT=$VAULT_COMMIT" -t homelab-vault-ci .
+          test ! -e public/ci-context-probe.txt
+          printf 'This unlisted file must stay outside the image.\n' > public/ci-context-probe.txt
+          trap 'rm -f public/ci-context-probe.txt' EXIT
+          docker build -f deploy/Dockerfile --build-arg "VAULT_VERSION=$version" --build-arg "VAULT_COMMIT=$VAULT_COMMIT" -t homelab-vault-ci .
           docker run -d --name vault-image-ci --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=16m -p 127.0.0.1:8081:8080 homelab-vault-ci
           image_ready=0
           for readiness_attempt in {1..45}; do
@@ -145,7 +148,7 @@ jobs:
             curl --fail --silent --show-error "http://127.0.0.1:8081/$asset" --output /dev/null
           done
           curl --fail --silent --show-error http://127.0.0.1:8081/version.js | grep -F "$VAULT_COMMIT"
-          for private_file in install-caddy-lxc.sh test.js test-core.cjs nginx.conf Caddyfile Dockerfile docker-compose.yml package.json cli.cjs scripts/publish-container.py; do
+          for private_file in install-caddy-lxc.sh docker-compose.yml package.json tests/repository.cjs tests/core.cjs deploy/nginx.conf deploy/Caddyfile deploy/Dockerfile cli/vault.cjs scripts/publish-container.py public/index.html ci-context-probe.txt assets/Preview.png; do
             test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:8081/$private_file")" = 404
           done
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8081/.git/config)" = 403

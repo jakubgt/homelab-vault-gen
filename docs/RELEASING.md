@@ -30,9 +30,9 @@ GitHub documents [release immutability](https://docs.github.com/en/code-security
 
 ## Prepare and review a release
 
-1. Update `package.json`, the root/package versions in `package-lock.json`, `version.js`, and `RELEASE_VERSION` in the installer together. Add release notes to `CHANGELOG.md` and update current release links in the README.
+1. Update `package.json`, the root/package versions in `package-lock.json`, `public/version.js`, and `RELEASE_VERSION` in the installer together. Add release notes to `docs/CHANGELOG.md` and update current release links in the README.
 2. Open a pull request, review the diff, and wait for the required `test` check. Squash-merge it into protected `main`.
-3. Wait for the **tests** workflow on the actual merged main commit to pass. The **release** workflow will separately validate and prepare a `release-assets-COMMIT` artifact when `version.js` changes. That artifact is not a published GitHub release.
+3. Wait for the **tests** workflow on the actual merged main commit to pass. The **release** workflow will separately validate and prepare a `release-assets-COMMIT` artifact when `public/version.js` changes. That artifact is not a published GitHub release.
 4. Check out the exact current `main` commit with no local modifications. Confirm its full 40-character SHA and review it before publishing.
 
 ## Publish as the owner
@@ -40,12 +40,14 @@ GitHub documents [release immutability](https://docs.github.com/en/code-security
 With GitHub CLI authenticated as `jakubgt`, Python 3, and Git available, build from that clean checkout:
 
 ```bash
-python -I scripts/build-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.3.0
-python -I scripts/verify-release.py --directory dist/v2.3.0 --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA
-python -I scripts/publish-release.py --version 2.3.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.3.0
+python -I scripts/build-release.py --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.4.0
+python -I scripts/verify-release.py --directory dist/v2.4.0 --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA
+python -I scripts/publish-release.py --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.4.0
 ```
 
 Replace the placeholder with the reviewed commit's full SHA. Use a separate output directory for each version; the publisher requires exactly that release's three files. `-I` isolates Python from local module shadowing and `PYTHONPATH`. The publisher refuses a dirty checkout, the wrong owner/repository, an unprotected or different current main commit, missing successful CI, missing tag controls, disabled release immutability, mismatched artifacts, or a tag pointing elsewhere. It reproduces the artifacts locally before uploading. It creates a draft, uploads the exact files, and publishes only after rechecking policy and identity. Published releases and existing tag targets are never overwritten. A matching interrupted owner-created draft can be resumed without clobbering conflicting assets.
+
+The archive preserves the organized source layout. Open `public/index.html` for local browser use or run `node cli/vault.cjs` from the extracted root. Runtime assets and their license copies live in `public/`; deployment examples live in `deploy/`, and the changelog lives in `docs/CHANGELOG.md`. Packaging checks that `public/LICENSE` matches the repository's `LICENSE` and stamps the reviewed commit into `public/version.js`. When checking an extracted copy, point `--extracted` at the archive root containing `public/` and `cli/`.
 
 If you publish through GitHub's web interface instead, perform the same review explicitly: create the version tag at the exact tested main commit, create a draft release, attach the offline ZIP, matching manifest, and `SHA256SUMS`, verify all files, then publish with immutability enabled. The CLI guardrails do not apply to manual browser actions. Never publish a draft before its assets are complete, because immutable assets cannot be replaced afterward.
 
