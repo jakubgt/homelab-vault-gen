@@ -280,7 +280,7 @@ def publish(root, version, commit, artifacts, client=None, build=expected_artifa
     verify_tag(client, tag, commit)
     if release is None:
         with zipfile.ZipFile(Path(artifacts) / f"homelab-vault-gen-{tag}.zip") as archive:
-            notes = archive.read("CHANGELOG.md").decode("utf-8")
+            notes = archive.read("docs/CHANGELOG.md").decode("utf-8")
         release = client.api("POST", f"repos/{REPOSITORY}/releases", {
             "tag_name": tag, "target_commitish": commit, "name": f"Homelab Vault {tag}",
             "body": notes, "draft": True, "prerelease": False,

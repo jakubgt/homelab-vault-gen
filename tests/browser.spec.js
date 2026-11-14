@@ -47,8 +47,18 @@ async function installClipboard(page, deferred = false) {
     }, { deferred });
 }
 
+async function chooseMode(page, mode) {
+    if (await page.locator('#mode-select').isVisible()) await page.locator('#mode-select').selectOption(mode);
+    else await page.locator(`#tab-${mode}`).click();
+}
+
+async function openDetails(page, selector) {
+    const details = page.locator(selector);
+    if (!await details.evaluate((element) => element.open)) await details.locator(':scope > summary').click();
+}
+
 async function pattern(page, value) {
-    await page.locator('#tab-pattern').click();
+    await chooseMode(page, 'pattern');
     await page.locator('#pattern-input').fill(value);
     await expect(page.locator('#generation-error')).toBeHidden();
 }
@@ -75,6 +85,100 @@ async function decodeQr(page) {
     return jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
 }
 
+for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 900 }]) {
+    test(`compact default at ${viewport.width}px keeps actions visible above collapsed settings`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await page.goto('/');
+        for (const selector of ['#advanced-generation', '#privacy-options', '.export-panel', '.about-panel', '#strength-details']) {
+            expect(await page.locator(selector).evaluate((details) => details.open)).toBe(false);
+        }
+        await expect(page.locator('#opt-paranoid')).toBeVisible();
+        await expect(page.locator('#profile-select')).toBeVisible();
+        for (const id of ['generate-btn', 'copy-btn', 'qr-btn']) await expect(page.locator(`#${id}`)).toBeInViewport();
+        const card = await page.locator('.container').boundingBox();
+        expect(card.height).toBeLessThan(860);
+        const result = await page.locator('.result-section').boundingBox();
+        const actions = await page.locator('.action-group').boundingBox();
+        const presets = await page.locator('.preset-row').boundingBox();
+        expect(actions.y).toBeGreaterThanOrEqual(result.y + result.height);
+        expect(actions.y + actions.height).toBeLessThan(presets.y);
+        const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
+        expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
+    });
+}
+
+test('mobile mode selector supports all modes and stays synchronized with desktop tabs after reload', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto('/');
+    await expect(page.locator('.tabs')).toBeHidden();
+    await expect(page.getByLabel('Mode', { exact: true })).toBeVisible();
+    for (const mode of ['pass', 'user', 'pattern', 'raw', 'pwd']) {
+        await page.getByLabel('Mode', { exact: true }).selectOption(mode);
+        await expect(page.locator(`#${mode}-options`)).toBeVisible();
+        await expect(page.locator(`#tab-${mode}`)).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('#result')).not.toBeEmpty();
+    }
+    await page.locator('#mode-select').selectOption('raw');
+    await page.reload();
+    await expect(page.locator('#mode-select')).toHaveValue('raw');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(page.locator('#mode-select')).toBeHidden();
+    await expect(page.locator('#tab-raw')).toBeVisible();
+    await expect(page.locator('#tab-raw')).toHaveAttribute('aria-selected', 'true');
+    await page.locator('#tab-pwd').click();
+    await expect(page.locator('#mode-select')).toHaveValue('pwd');
+});
+
+test('strength breakdown is keyboard accessible without generating another secret', async ({ page }) => {
+    await page.goto('/');
+    const secret = await page.locator('#result').textContent();
+    await expect(page.locator('#crack-text')).toBeHidden();
+    await page.locator('#strength-details > summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#crack-text')).toBeVisible();
+    await expect(page.locator('#pool-info')).toContainText('Character pool');
+    await page.keyboard.press('Space');
+    await expect(page.locator('#crack-text')).toBeHidden();
+    await expect(page.locator('#result')).toHaveText(secret);
+});
+
+test('collapsed privacy settings keep compatibility warnings and Paranoid controls visible', async ({ page }) => {
+    await page.goto('/');
+    await pattern(page, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    await openDetails(page, '#privacy-options');
+    await page.locator('#target-max-length').fill('8');
+    await page.locator('#target-max-length').blur();
+    await page.locator('#clear-time').selectOption('30000');
+    await page.locator('#privacy-options > summary').click();
+    await expect(page.locator('#clear-setting-summary')).toHaveText('Clear after 30s');
+    await expect(page.locator('#compatibility-warning')).toBeVisible();
+    await expect(page.locator('#compatibility-warning')).toContainText('Exceeds the target limit by 18 characters');
+    await page.locator('#opt-paranoid').check();
+    await expect(page.locator('#result')).toHaveText('Credential hidden');
+    await expect(page.locator('#paranoid-overlay')).toBeVisible();
+    expect(await page.locator('#privacy-options').evaluate((details) => details.open)).toBe(false);
+});
+
+test('mobile bulk generation disables relocated controls and Paranoid can still cancel it', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto('/');
+    await pattern(page, '[A-Z]{512}');
+    await openBulk(page, 10000);
+    const downloads = [];
+    page.on('download', (download) => downloads.push(download));
+    await page.locator('#export-txt-btn').click();
+    await expect(page.locator('#bulk-progress')).toBeVisible();
+    for (const id of ['mode-select', 'profile-select', 'pattern-input', 'raw-byte-length', 'profile-save-btn']) {
+        await expect(page.locator(`#${id}`)).toBeDisabled();
+    }
+    await expect(page.locator('#opt-paranoid')).toBeEnabled();
+    await page.locator('#opt-paranoid').check();
+    await expect(page.locator('#bulk-progress')).toBeHidden();
+    await expect(page.locator('#mode-select')).toBeEnabled();
+    await expect(page.locator('#export-txt-btn')).toBeDisabled();
+    expect(downloads).toEqual([]);
+});
+
 test('serves hardened headers and generates each mode', async ({ page }) => {
     const response = await page.goto('/');
     const headers = response.headers();
@@ -86,7 +190,7 @@ test('serves hardened headers and generates each mode', async ({ page }) => {
     expect(headers['x-content-type-options']).toBe('nosniff');
     await expect(page.locator('#result')).toHaveText(/.{24}/);
     for (const mode of ['pass', 'user', 'pattern', 'raw', 'pwd']) {
-        await page.locator(`#tab-${mode}`).click();
+        await chooseMode(page, mode);
         await expect(page.locator(`#tab-${mode}`)).toHaveAttribute('aria-selected', 'true');
         await expect(page.locator('#result')).not.toBeEmpty();
     }
@@ -129,7 +233,7 @@ test('raw secrets encode the selected number of random bytes without losing entr
             const bytes = Buffer.from(secret, encoding);
             expect(bytes.length).toBe(byteLength);
             expect(bytes.toString(encoding)).toBe(secret);
-            await expect(page.locator('#entropy-text')).toHaveText(`Entropy: ${byteLength * 8} bits`);
+            await expect(page.locator('#entropy-text')).toHaveText(`${byteLength * 8} bits`);
             if (encoding === 'hex') expect(secret).toMatch(new RegExp(`^[0-9a-f]{${byteLength * 2}}$`));
             if (encoding === 'base64') expect(secret).toMatch(/^[A-Za-z0-9+/]+={1,2}$/);
             if (encoding === 'base64url') expect(secret).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -143,7 +247,7 @@ test('raw settings and saved presets survive reload without storing a generated 
     await page.locator('#raw-byte-length').selectOption('64');
     await page.locator('#raw-encoding').selectOption('base64url');
     const secret = await page.locator('#result').textContent();
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-name').fill('64 random bytes as base64url');
     await page.locator('#profile-save-btn').click();
     const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
@@ -152,7 +256,7 @@ test('raw settings and saved presets survive reload without storing a generated 
     await expect(page.locator('#tab-raw')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#raw-byte-length')).toHaveValue('64');
     await expect(page.locator('#raw-encoding')).toHaveValue('base64url');
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-select').selectOption('raw-hex');
     await expect(page.locator('#raw-byte-length')).toHaveValue('32');
     await expect(page.locator('#raw-encoding')).toHaveValue('hex');
@@ -285,6 +389,7 @@ test('copy timer expires at its displayed deadline', async ({ page }) => {
     await installClipboard(page);
     await page.clock.install();
     await page.goto('/');
+    await openDetails(page, '#privacy-options');
     await page.locator('#clear-time').selectOption('30000');
     await page.locator('#copy-btn').click();
     await expect(page.locator('#clear-countdown')).toContainText('Clears in');
@@ -299,6 +404,7 @@ test('out-of-order clipboard completion cannot cancel the newer clear timer', as
     await installClipboard(page, true);
     await page.clock.install();
     await page.goto('/');
+    await openDetails(page, '#privacy-options');
     await page.locator('#clear-time').selectOption('30000');
     await pattern(page, 'COPY-A');
     await page.locator('#copy-btn').click();
@@ -475,6 +581,7 @@ test('lowercase username option produces only lowercase words and digits', async
 test('target length limit reports an advisory without truncating the generated secret', async ({ page }) => {
     await page.goto('/');
     await pattern(page, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    await openDetails(page, '#privacy-options');
     await page.locator('#target-max-length').fill('8');
     await page.locator('#target-max-length').blur();
     await expect(page.locator('#result')).toHaveText('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
@@ -484,7 +591,7 @@ test('target length limit reports an advisory without truncating the generated s
 
 test('saved presets are independent snapshots and survive a reload', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-name').fill('My 24 character password');
     await page.locator('#profile-save-btn').click();
     await page.locator('#length-num').fill('40');
@@ -494,7 +601,7 @@ test('saved presets are independent snapshots and survive a reload', async ({ pa
     await expect(page.locator('#length-num')).toHaveValue('24');
     await expect(page.locator('#result')).toHaveText(/^.{24}$/);
     await page.reload();
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-select').selectOption('saved:0');
     await expect(page.locator('#length-num')).toHaveValue('24');
     await page.locator('#profile-delete-btn').click();
@@ -503,7 +610,7 @@ test('saved presets are independent snapshots and survive a reload', async ({ pa
 
 test('built-in PIN preset preserves numeric-only generation', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-select').selectOption('pin');
     await expect(page.locator('#result')).toHaveText(/^\d{6}$/);
     await expect(page.locator('#opt-upper')).not.toBeChecked();
@@ -513,7 +620,7 @@ test('built-in PIN preset preserves numeric-only generation', async ({ page }) =
 
 test('allowed-character preview follows presets, exclusions and normalized custom symbols', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-select').selectOption('alphanumeric');
     await page.locator('#allowed-characters > summary').click();
     const preview = page.locator('#allowed-character-preview');
@@ -539,10 +646,11 @@ test('allowed-character preview follows presets, exclusions and normalized custo
 test('normalizing a numeric input after loading a preset regenerates the displayed credential', async ({ page }) => {
     await page.goto('/');
     await page.locator('#tab-user').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#opt-user-sep').selectOption('_');
     await page.locator('#user-num-count').fill('5');
     await page.locator('#user-num-count').blur();
-    await page.locator('.preset-panel > summary').click();
+    await openDetails(page, '#advanced-generation');
     await page.locator('#profile-name').fill('Five digit suffix');
     await page.locator('#profile-save-btn').click();
     await page.locator('#user-num-count').fill('3');
@@ -558,11 +666,11 @@ test('normalizing a numeric input after loading a preset regenerates the display
 test('320px layout keeps all modes, expanded settings and the QR inside the viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 780 });
     await page.goto('/');
-    for (const summary of ['.preset-panel > summary', '.export-panel > summary', '.about-panel > summary', '#allowed-characters > summary']) {
+    for (const summary of ['#advanced-generation > summary', '#privacy-options > summary', '.export-panel > summary', '.about-panel > summary', '#allowed-characters > summary']) {
         await page.locator(summary).click();
     }
     for (const mode of ['raw', 'pwd', 'pass', 'user', 'pattern']) {
-        await page.locator(`#tab-${mode}`).click();
+        await chooseMode(page, mode);
         if (mode === 'pattern') await page.locator('#pattern-input').fill('[A-Z]{512}');
         const dimensions = await page.evaluate(() => ({
             viewport: document.documentElement.clientWidth,
@@ -701,7 +809,7 @@ test('local file works with network offline for generation and QR rendering', as
         networkAttempts.push(route.request().url());
         return route.abort();
     });
-    const entry = pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href;
+    const entry = pathToFileURL(path.resolve(__dirname, '..', 'public', 'index.html')).href;
     await page.goto(entry);
     await context.setOffline(true);
     await expect(page.locator('#result')).toHaveText(/^.{24}$/);

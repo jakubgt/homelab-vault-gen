@@ -12,9 +12,8 @@ LABEL org.opencontainers.image.title="Homelab Vault" \
 
 USER root
 RUN rm -rf /usr/share/nginx/html/*
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY index.html styles.css core.js app.js words.js qrcode.min.js version.js LICENSE THIRD_PARTY_NOTICES.md manifest.webmanifest /usr/share/nginx/html/
-COPY assets/vault-icon.png assets/icon-192.png assets/icon-512.png /usr/share/nginx/html/assets/
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY public/ /usr/share/nginx/html/
 RUN case "$VAULT_COMMIT" in source) ;; *) \
       printf '%s' "$VAULT_COMMIT" | grep -Eq '^[0-9a-f]{40}$' && \
       printf '%s' "$VAULT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && \

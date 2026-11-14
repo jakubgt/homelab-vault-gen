@@ -4,11 +4,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { once } = require('node:events');
-const core = require('./core.js');
+const core = require('../public/core.js');
 
 const HELP = `Homelab Vault — dependency-free local credential generation (Node.js 22+)
 
-Usage: node cli.cjs [password|passphrase|username|pattern|raw] [options]
+Usage: node cli/vault.cjs [password|passphrase|username|pattern|raw] [options]
 
 Common:     --count N          1–1000 results, one exact value per line (default 1)
 Password:   --length N         4–128 characters (default 24)
@@ -90,7 +90,7 @@ function parse(argv) {
 }
 
 function loadWords() {
-    const source = fs.readFileSync(path.join(__dirname, 'words.js'), 'utf8').trim();
+    const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'words.js'), 'utf8').trim();
     // Parse only the vendored data declaration; never evaluate JavaScript.
     const match = /^const WORDS = (\[(?:\s*'[a-z-]+'\s*,?)*\]);$/.exec(source);
     if (!match) fail('The bundled EFF wordlist is not in its expected data format.');
@@ -135,7 +135,7 @@ async function main(argv, stdin = process.stdin, stdout = process.stdout) {
     const options = parse(argv);
     if (options.help) { stdout.write(HELP); return; }
     if (options.version) {
-        const source = fs.readFileSync(path.join(__dirname, 'version.js'), 'utf8');
+        const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'version.js'), 'utf8');
         const match = /\bversion:\s*['"]([0-9]+\.[0-9]+\.[0-9]+)['"]/.exec(source);
         if (!match) fail('The bundled version metadata is invalid.');
         stdout.write(match[1] + '\n');

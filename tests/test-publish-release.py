@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("publisher", ROOT / "scripts/publish-release.py")
 publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
-VERSION = "2.2.1"
+VERSION = "2.4.0"
 COMMIT = "a" * 40
 OTHER = "b" * 40
 TAG = "v" + VERSION
@@ -122,9 +122,9 @@ class PublisherTests(unittest.TestCase):
         self.artifacts = Path(self.temporary.name)
         zipped = io.BytesIO()
         with zipfile.ZipFile(zipped, "w") as archive:
-            archive.writestr("CHANGELOG.md", "Reviewed release notes\n")
+            archive.writestr("docs/CHANGELOG.md", "Reviewed release notes\n")
         self.expected = {f"homelab-vault-gen-{TAG}.zip": zipped.getvalue(),
-                         f"homelab-vault-gen-{TAG}.manifest.json": b'{"version":"2.2.1"}\n', "SHA256SUMS": b"verified sums\n"}
+                         f"homelab-vault-gen-{TAG}.manifest.json": b'{"version":"2.4.0"}\n', "SHA256SUMS": b"verified sums\n"}
         for name, content in self.expected.items():
             (self.artifacts / name).write_bytes(content)
         self.client = FakeClient(self.expected)
@@ -148,7 +148,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(len([call for call in self.client.calls if call[1].endswith("immutable-releases")]), 3)
 
     def test_invalid_trust_inputs_stop_before_any_mutation(self):
-        for key, value in [("branch", "attacker-branch"), ("local_sha", OTHER), ("dirty", " M app.js"),
+        for key, value in [("branch", "attacker-branch"), ("local_sha", OTHER), ("dirty", " M public/app.js"),
                            ("origin", "https://github.com/attacker/fork.git"), ("user", "collaborator"),
                            ("protected", False), ("main_sha", OTHER), ("immutable", False),
                            ("immutable_status", 403), ("immutable_status", 404), ("tag_sha", OTHER), ("tag_status", 403)]:

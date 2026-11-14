@@ -17,38 +17,39 @@ import zipfile
 PROJECT = "homelab-vault-gen"
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_FILES = (
-    "Caddyfile",
-    "CHANGELOG.md",
     "LICENSE",
     "README.md",
     "SECURITY.md",
-    "THIRD_PARTY_NOTICES.md",
-    "app.js",
-    "assets/icon-192.png",
-    "assets/icon-512.png",
-    "assets/vault-icon.png",
-    "cli.cjs",
-    "core.js",
+    "public/LICENSE",
+    "public/THIRD_PARTY_NOTICES.md",
+    "public/app.js",
+    "public/assets/icon-192.png",
+    "public/assets/icon-512.png",
+    "public/assets/vault-icon.png",
+    "cli/vault.cjs",
+    "public/core.js",
     "docker-compose.yml",
-    "docker-compose.image.yml",
-    "Dockerfile",
+    "deploy/Caddyfile",
+    "deploy/docker-compose.image.yml",
+    "deploy/Dockerfile",
     ".dockerignore",
     "docs/CLI.md",
+    "docs/CHANGELOG.md",
     "docs/CONTAINERS.md",
     "docs/RELEASING.md",
     "docs/screenshots/homelab-vault.png",
-    "index.html",
+    "public/index.html",
     "install-caddy-lxc.sh",
-    "manifest.webmanifest",
-    "nginx.conf",
-    "qrcode.min.js",
+    "public/manifest.webmanifest",
+    "deploy/nginx.conf",
+    "public/qrcode.min.js",
     "scripts/verify-release.py",
-    "styles.css",
-    "version.js",
-    "words.js",
+    "public/styles.css",
+    "public/version.js",
+    "public/words.js",
 )
 BINARY_FILES = frozenset({
-    "assets/vault-icon.png", "assets/icon-192.png", "assets/icon-512.png",
+    "public/assets/vault-icon.png", "public/assets/icon-192.png", "public/assets/icon-512.png",
     "docs/screenshots/homelab-vault.png",
 })
 ARCHIVE_MANIFEST = "RELEASE-MANIFEST.json"
@@ -81,13 +82,16 @@ def validate_metadata(root, version, commit):
     if not isinstance(package, dict) or package.get("version") != version:
         raise ValueError("Requested version does not match package.json")
 
-    version_source = read_source(root, "version.js").decode("utf-8")
+    version_source = read_source(root, "public/version.js").decode("utf-8")
     source_match = re.search(
         r"VAULT_BUILD\s*=\s*Object\.freeze\(\s*\{\s*version\s*:\s*(['\"])([^'\"]+)\1",
         version_source,
     )
     if not source_match or source_match.group(2) != version:
-        raise ValueError("Requested version does not match source version.js")
+        raise ValueError("Requested version does not match source public/version.js")
+
+    if read_source(root, "public/LICENSE") != read_source(root, "LICENSE"):
+        raise ValueError("The public/LICENSE copy must match the root LICENSE")
 
     installer = read_source(root, "install-caddy-lxc.sh").decode("utf-8")
     installer_match = re.search(r"^RELEASE_VERSION=(['\"])([^'\"]+)\1\s*$", installer, re.MULTILINE)
@@ -150,7 +154,7 @@ def build_release(root, version, commit, output):
     root = Path(root).resolve()
     commit = validate_metadata(root, version, commit)
     entries = {name: read_source(root, name) for name in RELEASE_FILES}
-    entries["version.js"] = (
+    entries["public/version.js"] = (
         "'use strict';\n"
         f"globalThis.VAULT_BUILD = Object.freeze({{ version: '{version}', commit: '{commit}' }});\n"
     ).encode("utf-8")
@@ -179,7 +183,7 @@ def build_release(root, version, commit, output):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", required=True, help="Release version, for example 2.2.0")
+    parser.add_argument("--version", required=True, help="Release version, for example 2.4.0")
     parser.add_argument("--commit", required=True, help="Full 40-character Git commit SHA")
     parser.add_argument("--output", required=True, type=Path, help="Directory for release artifacts")
     args = parser.parse_args(argv)

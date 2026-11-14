@@ -17,7 +17,7 @@ spec = importlib.util.spec_from_file_location("container_publisher", ROOT / "scr
 publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
 COMMIT = "a" * 40
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 BASE = "nginxinc/nginx-unprivileged@sha256:" + "b" * 64
 DIGEST = "sha256:" + "c" * 64
 INDEX = {"manifests": [{"platform": {"os": "linux", "architecture": arch}} for arch in ["amd64", "arm64"]]}
@@ -49,6 +49,9 @@ class FakeDocker:
         self.commands.append(args)
         if args[:2] == ("buildx", "build"):
             context = Path(args[-1])
+            self.dockerfile = Path(args[args.index("--file") + 1]).relative_to(context).as_posix()
+            if not (context / self.dockerfile).is_file():
+                raise AssertionError("Buildx must select a Dockerfile from the verified context")
             self.context_files = {str(path.relative_to(context)).replace("\\", "/") for path in context.rglob("*") if path.is_file()}
             metadata = Path(args[args.index("--metadata-file") + 1])
             metadata.write_text(json.dumps({"containerimage.digest": DIGEST}))
@@ -77,6 +80,10 @@ class PublicationTests(unittest.TestCase):
         self.assertIn(f"{publisher.IMAGE}:sha-{COMMIT}", build)
         self.assertFalse(any(":latest" in argument for argument in build))
         self.assertEqual(docker.context_files, set(publisher.CONTEXT_FILES))
+        self.assertEqual(docker.dockerfile, "deploy/Dockerfile")
+        self.assertIn("public/index.html", docker.context_files)
+        self.assertNotIn("index.html", docker.context_files)
+        self.assertFalse(any(name.startswith(("tests/", "scripts/", "cli/")) for name in docker.context_files))
         self.assertEqual(self.verifications, 2)
         self.assertIn(f"{publisher.IMAGE}@{DIGEST}", result)
 

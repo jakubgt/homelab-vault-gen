@@ -6,8 +6,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
-const nginx = fs.readFileSync(path.join(root, 'nginx.conf'), 'utf8');
+const root = path.resolve(__dirname, '..', 'public');
+const nginx = fs.readFileSync(path.resolve(__dirname, '..', 'deploy', 'nginx.conf'), 'utf8');
 const headers = Object.fromEntries(
     [...nginx.matchAll(/^\s*add_header\s+(\S+)\s+"([^"]+)"\s+always;/gm)]
         .map((match) => [match[1], match[2]])

@@ -1,6 +1,6 @@
 /*
  * Homelab Vault — zero-dependency production-core tests
- * Run with: node test.js
+ * Run with: node tests/repository.cjs
  */
 
 'use strict';
@@ -18,7 +18,7 @@ const {
     getSecureRandomInt,
     normalizeSymbolPool,
     parsePattern
-} = require('./core.js');
+} = require('../public/core.js');
 
 let passed = 0;
 let failed = 0;
@@ -48,11 +48,11 @@ function expectThrow(name, callback, ErrorType = Error) {
 }
 
 function read(relativePath) {
-    return fs.readFileSync(path.join(__dirname, relativePath), 'utf8');
+    return fs.readFileSync(path.resolve(__dirname, '..', relativePath), 'utf8');
 }
 
 function loadWords() {
-    const source = read('words.js');
+    const source = read('public/words.js');
     const arrayMatch = source.match(/\[[\s\S]*\]/);
     if (!arrayMatch) throw new Error('Could not find the WORDS array in words.js');
     return JSON.parse(arrayMatch[0].replace(/'/g, '"'));
@@ -178,17 +178,17 @@ check(
 
 section('6. Repository integration');
 
-const html = read('index.html');
-const app = read('app.js');
-const nginx = read('nginx.conf');
-const caddy = read('Caddyfile');
+const html = read('public/index.html');
+const app = read('public/app.js');
+const nginx = read('deploy/nginx.conf');
+const caddy = read('deploy/Caddyfile');
 const compose = read('docker-compose.yml');
 const readme = read('README.md');
 const installer = read('install-caddy-lxc.sh');
 const packageInfo = JSON.parse(read('package.json'));
 const dependabot = read('.github/dependabot.yml');
 const versionContext = vm.createContext({});
-vm.runInContext(read('version.js'), versionContext, { timeout: 1000, filename: 'version.js' });
+vm.runInContext(read('public/version.js'), versionContext, { timeout: 1000, filename: 'version.js' });
 const build = versionContext.VAULT_BUILD;
 const runtimeScripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
 const activeCaddy = caddy
@@ -232,14 +232,18 @@ const requiredCsp = {
 check('HTML contains no inline style attributes', !/\sstyle\s*=/i.test(html));
 check('HTML contains no inline scripts', !/<script(?![^>]*\bsrc=)[^>]*>/i.test(html));
 check('shared production core loads before app.js', html.indexOf('core.js') > -1 && html.indexOf('core.js') < html.indexOf('app.js'));
-check('Docker serves every HTML script through a read-only mount', runtimeScripts.length > 0 && runtimeScripts.every((asset) => compose.includes(`./${asset}:/usr/share/nginx/html/${asset}:ro`)));
+check('Docker serves scripts from the dedicated read-only public directory',
+    compose.includes('./public:/usr/share/nginx/html:ro') && runtimeScripts.length > 0 &&
+    runtimeScripts.every((asset) => !asset.includes('..') && fs.statSync(path.resolve(__dirname, '..', 'public', asset)).isFile()) &&
+    !compose.includes('- .:/usr/share/nginx/html'));
 check('build metadata loads before app.js', runtimeScripts.indexOf('version.js') >= 0 && runtimeScripts.indexOf('version.js') < runtimeScripts.indexOf('app.js'));
 check('build metadata matches the package release version', Boolean(build) && build.version === packageInfo.version);
 check('build metadata identifies a source checkout or one full commit', Boolean(build) && /^(?:source|[0-9a-f]{40})$/.test(build.commit));
 check('build metadata cannot be mutated accidentally', Boolean(build) && Object.isFrozen(build));
 const installerVersion = installer.match(/^RELEASE_VERSION=["']([^"']+)["']\s*$/m)?.[1];
 check('installer and browser identify the same release version', installerVersion === packageInfo.version);
-check('Docker deployment includes application and third-party licenses', ['LICENSE', 'THIRD_PARTY_NOTICES.md'].every((asset) => compose.includes(`./${asset}:/usr/share/nginx/html/${asset}:ro`)));
+check('Web runtime includes the application and third-party licenses',
+    read('public/LICENSE') === read('LICENSE') && read('public/THIRD_PARTY_NOTICES.md').includes('QRCode'));
 check('Docker healthcheck matches the IPv4 NGINX listener', compose.includes('http://127.0.0.1:8080/') && /^\s*listen 8080;/m.test(nginx));
 check('Dependabot uses the Compose ecosystem for its interpolated image default', /^\s*- package-ecosystem: docker-compose\s*$/m.test(dependabot));
 check('Paranoid Mode never clears unrelated origin storage', !app.includes('localStorage.clear'));
@@ -305,7 +309,7 @@ check(
 check(
     'installer stages version metadata and license files with the runtime assets',
     installer.includes('/srv/.homelab-vault.new.XXXXXX') &&
-        ['LICENSE', 'THIRD_PARTY_NOTICES.md'].every((asset) => installer.includes('"${SOURCE_DIR}/' + asset + '"')) &&
+        ['LICENSE', 'THIRD_PARTY_NOTICES.md'].every((asset) => installer.includes('"${SOURCE_DIR}/public/' + asset + '"')) &&
         installer.includes('"${SITE_STAGE}/version.js"') &&
         installer.includes('"${SITE_STAGE}/${DEPLOYMENT_FILE}"')
 );

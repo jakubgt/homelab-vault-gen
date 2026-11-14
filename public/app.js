@@ -45,6 +45,7 @@ const el = {
     tabUser: document.getElementById('tab-user'),
     tabPattern: document.getElementById('tab-pattern'),
     tabRaw: document.getElementById('tab-raw'),
+    modeSelect: document.getElementById('mode-select'),
     pwdOpts: document.getElementById('pwd-options'),
     passOpts: document.getElementById('pass-options'),
     userOpts: document.getElementById('user-options'),
@@ -158,8 +159,8 @@ function cancelClearTimer() {
 }
 
 function resetMetrics() {
-    el.entropyText.textContent = 'Entropy: —';
-    el.strengthText.textContent = 'Strength: —';
+    el.entropyText.textContent = '— bits';
+    el.strengthText.textContent = '—';
     el.strengthText.className = '';
     el.crackText.textContent = 'Estimated offline crack time: —';
     el.poolInfo.textContent = '';
@@ -168,7 +169,7 @@ function resetMetrics() {
 }
 
 function updateActionAvailability() {
-    document.querySelectorAll('.controls input, .controls select, .controls button, .tabs button, .preset-panel input, .preset-panel select, .preset-panel button').forEach((control) => {
+    document.querySelectorAll('.controls input, .controls select, .controls button, .tabs button, #mode-select').forEach((control) => {
         if (control.id !== 'opt-paranoid' && control.id !== 'bulk-cancel-btn') control.disabled = Boolean(bulkJob);
     });
     const canGenerate = hasSecureRandom();
@@ -569,8 +570,8 @@ function calculateEntropyAndStrength() {
         classSuffix = 'very-strong';
     }
 
-    el.entropyText.textContent = `Entropy: ${Math.round(entropy)} bits`;
-    el.strengthText.textContent = `Strength: ${strength}`;
+    el.entropyText.textContent = `${Math.round(entropy)} bits`;
+    el.strengthText.textContent = strength;
     el.strengthText.className = `strength-${classSuffix}`;
     el.crackText.textContent = `Estimated offline crack time: ${formatCrackTime(averageSeconds)}`;
     el.entropyBar.value = Math.min(128, entropy);
@@ -608,6 +609,10 @@ function fallbackCopyTextToClipboard(text) {
 function getClearDelay() {
     if (el.clearTime.value !== 'custom') return Number.parseInt(el.clearTime.value, 10);
     return readIntField('custom-clear-time', 1, 86400, 60) * 1000;
+}
+
+function updatePrivacySummary() {
+    document.getElementById('clear-setting-summary').textContent = `Clear after ${getClearDelay() / 1000}s`;
 }
 
 function updateCountdown() {
@@ -670,6 +675,7 @@ function applySymbolPreset() {
 
 function updateUI(shouldGenerate = true) {
     if (!shouldGenerate) updateAllowedCharacters();
+    el.modeSelect.value = currentMode;
     for (const mode of MODES) {
         const active = currentMode === mode;
         const tab = tabByMode[mode];
@@ -678,6 +684,9 @@ function updateUI(shouldGenerate = true) {
         tab.setAttribute('aria-selected', String(active));
         tab.tabIndex = active ? 0 : -1;
         panel.hidden = !active;
+    }
+    for (const [mode, id] of Object.entries({ pwd: 'pwd-advanced', pass: 'pass-advanced', user: 'user-advanced', pattern: 'pattern-help', raw: 'raw-help' })) {
+        document.getElementById(id).hidden = currentMode !== mode;
     }
 
     const usesLength = ['pwd', 'pass', 'user'].includes(currentMode);
@@ -705,6 +714,7 @@ function updateUI(shouldGenerate = true) {
     }
 
     toggleNestedInputs();
+    updatePrivacySummary();
     updateActionAvailability();
     if (shouldGenerate) generate();
 }
@@ -1021,6 +1031,7 @@ el.lengthNum.addEventListener('change', () => {
 for (const mode of MODES) {
     tabByMode[mode].addEventListener('click', () => activateMode(mode));
 }
+el.modeSelect.addEventListener('change', () => activateMode(el.modeSelect.value));
 
 document.querySelector('.tabs').addEventListener('keydown', (event) => {
     const currentIndex = tabs.indexOf(document.activeElement);
@@ -1091,10 +1102,12 @@ bindBoundedNumber(document.getElementById('user-num-count'), 1, 9, 3);
 
 el.clearTime.addEventListener('change', () => {
     el.customClearTime.classList.toggle('hidden', el.clearTime.value !== 'custom');
+    updatePrivacySummary();
     saveSettings();
 });
 el.customClearTime.addEventListener('change', () => {
     el.customClearTime.value = readIntField('custom-clear-time', 1, 86400, 60);
+    updatePrivacySummary();
     saveSettings();
 });
 el.bulkCount.addEventListener('change', () => {

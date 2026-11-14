@@ -34,7 +34,7 @@ def load_module(name, path):
 
 builder = load_module("release_builder_for_verifier_tests", ROOT / "scripts/build-release.py")
 verifier = load_module("release_verifier_under_test", SCRIPT)
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 COMMIT = "a" * 40
 STEM = f"homelab-vault-gen-v{VERSION}"
 ARCHIVE = f"{STEM}.zip"
@@ -59,7 +59,7 @@ class VerificationTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
         (source / "package.json").write_text(json.dumps({"version": VERSION}), encoding="utf-8")
-        (source / "version.js").write_text(
+        (source / "public/version.js").write_text(
             f"'use strict';\nglobalThis.VAULT_BUILD = Object.freeze({{ version: '{VERSION}', commit: 'source' }});\n",
             encoding="utf-8",
         )
@@ -159,7 +159,7 @@ class VerificationTests(unittest.TestCase):
 
     def test_expected_version_and_commit_must_match(self):
         for options in [{"version": "9.9.9"}, {"commit": "b" * 40},
-                        {"version": "v2.3.0"}, {"commit": "short"}]:
+                        {"version": "v2.4.0"}, {"commit": "short"}]:
             with self.subTest(options=options):
                 self.assert_rejected(**options)
 
@@ -217,7 +217,7 @@ class VerificationTests(unittest.TestCase):
         self.assert_rejected()
 
     def test_hash_and_size_check_each_archived_file_after_outer_checksums_match(self):
-        self.write_entries([(info, b"tampered bytes" if info.filename == "index.html" else data)
+        self.write_entries([(info, b"tampered bytes" if info.filename == "public/index.html" else data)
                             for info, data in self.entries()])
         self.assert_rejected()
         for field, value in [("size", 1), ("sha256", "0" * 64)]:
@@ -228,7 +228,7 @@ class VerificationTests(unittest.TestCase):
 
     def test_missing_and_unlisted_archive_entries_are_rejected(self):
         entries = self.entries()
-        self.write_entries([(info, data) for info, data in entries if info.filename != "index.html"])
+        self.write_entries([(info, data) for info, data in entries if info.filename != "public/index.html"])
         self.assert_rejected()
         self.reset_artifacts()
         info = copy.copy(entries[0][0])
@@ -254,14 +254,14 @@ class VerificationTests(unittest.TestCase):
 
     def test_zip_symlink_directory_and_wrong_mode_are_rejected(self):
         for mode, suffix in [(stat.S_IFLNK | 0o777, "link"), (stat.S_IFDIR | 0o755, "directory/"),
-                             (stat.S_IFREG | 0o777, "index.html")]:
+                             (stat.S_IFREG | 0o777, "public/index.html")]:
             with self.subTest(mode=oct(mode)):
                 self.reset_artifacts()
                 entries = self.entries()
-                info = copy.copy(next(item for item, _ in entries if item.filename == "index.html"))
+                info = copy.copy(next(item for item, _ in entries if item.filename == "public/index.html"))
                 info.external_attr = mode << 16
                 info.filename = suffix
-                modified = [(info, b"target" if suffix == "link" else data) if original.filename == "index.html"
+                modified = [(info, b"target" if suffix == "link" else data) if original.filename == "public/index.html"
                             else (original, data) for original, data in entries]
                 self.write_entries(modified)
                 self.assert_rejected()
@@ -301,7 +301,7 @@ class VerificationTests(unittest.TestCase):
             lambda manifest: manifest.__setitem__("schema", 2),
             lambda manifest: manifest.__setitem__("schema", True),
             lambda manifest: manifest.__setitem__("project", "other-project"),
-            lambda manifest: manifest.__setitem__("version", "2.3.0/../bad"),
+            lambda manifest: manifest.__setitem__("version", "2.4.0/../bad"),
             lambda manifest: manifest.__setitem__("commit", "short"),
             lambda manifest: manifest.__setitem__("files", []),
             lambda manifest: manifest.__setitem__("files", "not a list"),
@@ -366,13 +366,13 @@ class VerificationTests(unittest.TestCase):
         payload = b"0" * (largest + 1000)
         modified = []
         for info, data in entries:
-            if info.filename == "index.html":
+            if info.filename == "public/index.html":
                 info.compress_type = zipfile.ZIP_DEFLATED
                 data = payload
             modified.append((info, data))
         self.write_entries(modified)
         def record_payload(manifest):
-            entry = next(entry for entry in manifest["files"] if entry["path"] == "index.html")
+            entry = next(entry for entry in manifest["files"] if entry["path"] == "public/index.html")
             entry.update(size=len(payload), sha256=digest(payload))
         self.change_manifest(record_payload)
         # The compressed ZIP stays small while its decoded member exceeds this bound.
@@ -401,20 +401,20 @@ class VerificationTests(unittest.TestCase):
         (extracted / "my-local-notes.txt").write_text("Local extra", encoding="utf-8")
         result = verifier.verify_release(self.directory, extracted=extracted)
         self.assertTrue(result["extracted"])
-        (extracted / "index.html").write_bytes(b"changed after extraction")
+        (extracted / "public/index.html").write_bytes(b"changed after extraction")
         self.assert_rejected(extracted=extracted)
 
     def test_missing_extracted_file_and_embedded_manifest_are_rejected(self):
         extracted = self.extracted()
-        (extracted / "index.html").unlink()
+        (extracted / "public/index.html").unlink()
         self.assert_rejected(extracted=extracted)
-        (extracted / "index.html").write_bytes(next(data for info, data in self.entries() if info.filename == "index.html"))
+        (extracted / "public/index.html").write_bytes(next(data for info, data in self.entries() if info.filename == "public/index.html"))
         (extracted / "RELEASE-MANIFEST.json").write_bytes(b"{}")
         self.assert_rejected(extracted=extracted)
 
     def test_extracted_file_symlink_cannot_redirect_verification(self):
         extracted = self.extracted()
-        source = extracted / "index.html"
+        source = extracted / "public/index.html"
         outside = self.workspace / "outside.html"
         source.replace(outside)
         self.symlink_or_skip(source, outside)
@@ -422,7 +422,7 @@ class VerificationTests(unittest.TestCase):
 
     def test_extracted_parent_symlink_cannot_redirect_verification(self):
         extracted = self.extracted()
-        source = extracted / "assets"
+        source = extracted / "public/assets"
         outside = self.workspace / "outside-assets"
         source.rename(outside)
         self.symlink_or_skip(source, outside, directory=True)

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - version.js
+      - public/version.js
       - scripts/build-release.py
       - scripts/verify-release.py
       - tests/test-release.py
