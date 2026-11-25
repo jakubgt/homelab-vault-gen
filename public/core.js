@@ -16,6 +16,7 @@
         nums: '0123456789'
     });
     const DEFAULT_SYMS = '!@#$%^&*()-_=+[]{};:,.<>/?|~';
+    const DEFAULT_PATTERN = '[A-Z]{3}-[0-9]{4}-[a-z]{5}';
     const CONFIG_FRIENDLY_SYMS = '._-+=';
     const RANDOM_SEPARATOR_POOL = '!@#$%^&*-_=+';
     const randomWord = new Uint32Array(1);
@@ -53,14 +54,18 @@
         return randomWord[0] % max;
     }
 
-    function generateRawSecretBytes(options = {}, randomSource = globalThis.crypto) {
-        const settings = normalizeOptions(options, { byteLength: 32, encoding: 'hex' }, []);
+    function requireRawSecretOptions(settings) {
         if (![32, 64].includes(settings.byteLength)) {
             throw new RangeError('byteLength must be 32 or 64.');
         }
         if (!['hex', 'base64', 'base64url'].includes(settings.encoding)) {
             throw new RangeError('encoding must be hex, base64, or base64url.');
         }
+    }
+
+    function generateRawSecretBytes(options = {}, randomSource = globalThis.crypto) {
+        const settings = normalizeOptions(options, { byteLength: 32, encoding: 'hex' }, []);
+        requireRawSecretOptions(settings);
         requireRandomSource(randomSource);
 
         const raw = new Uint8Array(settings.byteLength);
@@ -254,13 +259,16 @@
 
     function generatePassphraseBytes(options, words, randomInt = getSecureRandomInt) {
         const settings = normalizePassphraseOptions(options);
-        const list = passphraseWordlist(settings, words);
+        return writePassphrase(settings, passphraseWordlist(settings, words), randomInt);
+    }
+
+    function writePassphrase(settings, list, randomInt, pickWord = () => randomInt(list.length)) {
         const indices = new Uint32Array(settings.count);
         const capitals = new Uint8Array(settings.count);
         let totalLength = settings.count - 1;
 
         for (let index = 0; index < settings.count; index++) {
-            indices[index] = randomInt(list.length);
+            indices[index] = pickWord(index);
             totalLength += list[indices[index]].length;
             capitals[index] = settings.capitalize && (!settings.randomizeCaps || randomInt(2) === 1);
         }
@@ -300,20 +308,10 @@
     function calculatePassphraseEntropy(options, words) {
         const settings = normalizePassphraseOptions(options);
         const list = passphraseWordlist(settings, words);
-        let entropy = settings.count * Math.log2(list.length);
-        if (settings.capitalize && settings.randomizeCaps) entropy += settings.count;
-        if (settings.separator === 'random') {
-            entropy += (settings.count - 1) * Math.log2(RANDOM_SEPARATOR_POOL.length);
-        }
-        if (settings.insertNumbers) {
-            // Do not credit random insertion positions: different insertion
-            // histories can lead to the same output. Digit values remain random.
-            entropy += settings.numberCount * (settings.randomizePositions ? 1 : settings.count) * Math.log2(10);
-        }
-        return entropy;
+        return passphraseEntropyDetails(settings, list.length, settings.count * Math.log2(list.length)).entropy;
     }
 
-    function generateUsernameBytes(options, words, randomInt = getSecureRandomInt) {
+    function normalizeUsernameOptions(options) {
         const settings = normalizeOptions(options === undefined ? {} : options, {
             count: 2, separator: '', appendNumbers: true, numberCount: 3, lowercase: false
         }, ['appendNumbers', 'lowercase']);
@@ -322,11 +320,18 @@
         if (!['', '-', '_', '.'].includes(settings.separator)) {
             throw new RangeError('Unsupported username separator.');
         }
-        const list = getWordlist(words).words;
+        return settings;
+    }
+
+    function generateUsernameBytes(options, words, randomInt = getSecureRandomInt) {
+        return writeUsername(normalizeUsernameOptions(options), getWordlist(words).words, randomInt);
+    }
+
+    function writeUsername(settings, list, randomInt, pickWord = () => randomInt(list.length)) {
         const indices = new Uint32Array(settings.count);
         let totalLength = settings.separator.length * (settings.count - 1);
         for (let index = 0; index < settings.count; index++) {
-            indices[index] = randomInt(list.length);
+            indices[index] = pickWord(index);
             totalLength += list[indices[index]].length;
         }
         if (settings.appendNumbers) totalLength += settings.numberCount + settings.separator.length;
@@ -440,9 +445,335 @@
         return { tokens, totalLength, entropy, error: null };
     }
 
+    const PASSWORD_CLASSES = [
+        ['upper', 'minUpper', CHARS.upper], ['lower', 'minLower', CHARS.lower],
+        ['nums', 'minNums', CHARS.nums], ['syms', 'minSyms']
+    ];
+    const PROFILE_OPTIONS = Object.freeze({
+        password: ['length', 'upper', 'lower', 'nums', 'syms', 'ambig', 'symbols', 'exclude',
+            'minUpper', 'minLower', 'minNums', 'minSyms', 'maxLength'],
+        passphrase: ['count', 'separator', 'capitalize', 'randomizeCaps', 'insertNumbers',
+            'numberCount', 'randomizePositions', 'maxWordLength', 'maxLength'],
+        username: ['count', 'separator', 'appendNumbers', 'numberCount', 'lowercase', 'maxLength'],
+        pattern: ['template', 'maxLength'],
+        raw: ['byteLength', 'encoding', 'maxLength']
+    });
+
+    function requireProfileKeys(object, allowed, label) {
+        if (!object || typeof object !== 'object' || Array.isArray(object)) {
+            throw new TypeError(`${label} must be an object.`);
+        }
+        for (const key of Object.keys(object)) {
+            if (!allowed.includes(key)) throw new RangeError(`${label} contains an unsupported field.`);
+        }
+    }
+
+    function normalizePasswordProfileOptions(options) {
+        const settings = normalizeOptions(options, {
+            length: 24, upper: true, lower: true, nums: true, syms: true, ambig: false,
+            symbols: DEFAULT_SYMS, exclude: ''
+        }, ['upper', 'lower', 'nums', 'syms', 'ambig']);
+        requireInteger(settings.length, 4, 128, 'length');
+        if (typeof settings.symbols !== 'string' || settings.symbols.length > 128) {
+            throw new RangeError('Symbols must be a string of up to 128 characters.');
+        }
+        settings.symbols = normalizeSymbolPool(settings.symbols);
+        if (settings.syms && !settings.symbols) {
+            throw new RangeError('Add at least one printable ASCII symbol or turn off Symbols.');
+        }
+        if (typeof settings.exclude !== 'string' || !/^[\x21-\x7e]{0,94}$/.test(settings.exclude)) {
+            throw new RangeError('Excluded characters must be printable ASCII without spaces.');
+        }
+        settings.exclude = uniqueChars(settings.exclude);
+        for (const [enabled, minimum] of PASSWORD_CLASSES) {
+            if (!Object.hasOwn(settings, minimum)) settings[minimum] = Number(settings[enabled]);
+            requireInteger(settings[minimum], 0, 128, minimum);
+            if (!settings[enabled] && settings[minimum] > 0) {
+                throw new RangeError('Enable every character class with a positive minimum.');
+            }
+        }
+        return settings;
+    }
+
+    function normalizeGenerationProfile(profile) {
+        requireProfileKeys(profile, ['version', 'mode', 'options'], 'Profile');
+        if (profile.version !== 1) throw new RangeError('Unsupported generation profile version.');
+        if (typeof profile.mode !== 'string' || !Object.hasOwn(PROFILE_OPTIONS, profile.mode)) {
+            throw new RangeError('Unsupported generation mode.');
+        }
+        const { mode, options } = profile;
+        requireProfileKeys(options, PROFILE_OPTIONS[mode], 'Profile options');
+
+        let settings;
+        if (mode === 'password') settings = normalizePasswordProfileOptions(options);
+        else if (mode === 'passphrase') {
+            settings = normalizePassphraseOptions(options);
+            settings.maxWordLength = options.maxWordLength ?? null;
+            if (settings.maxWordLength !== null) requireInteger(settings.maxWordLength, 1, 512, 'maxWordLength');
+        } else if (mode === 'username') settings = normalizeUsernameOptions(options);
+        else if (mode === 'pattern') {
+            settings = { template: Object.hasOwn(options, 'template') ? options.template : DEFAULT_PATTERN };
+            if (typeof settings.template !== 'string' || settings.template.length > 512) {
+                throw new RangeError('Pattern must be a string of up to 512 characters.');
+            }
+        } else {
+            settings = normalizeOptions(options, { byteLength: 32, encoding: 'hex' }, []);
+            requireRawSecretOptions(settings);
+        }
+        settings.maxLength = options.maxLength ?? null;
+        if (settings.maxLength !== null) requireInteger(settings.maxLength, 1, 1000, 'maxLength');
+        return Object.freeze({ version: 1, mode, options: Object.freeze(settings) });
+    }
+
+    function getPasswordProfileGroups(settings) {
+        const groups = [];
+        const excluded = settings.ambig ? settings.exclude + 'lI1O0' : settings.exclude;
+        for (const [enabled, minimum, standardPool] of PASSWORD_CLASSES) {
+            if (!settings[enabled]) continue;
+            const pool = Array.from(standardPool ?? settings.symbols).filter((char) => !excluded.includes(char)).join('');
+            if (pool) groups.push({ pool, minimum: settings[minimum] });
+            else if (settings[minimum] > 0) throw new RangeError('A required character class has no allowed characters.');
+        }
+        if (!groups.length) throw new RangeError('Select at least one character set.');
+        return groups;
+    }
+
+    function getPasswordProfileCharsets(options) {
+        return getPasswordProfileGroups(normalizePasswordProfileOptions(options)).map(({ pool }) => pool);
+    }
+
+    function randomBigInt(max, randomInt) {
+        if (max <= 1n) return 0n;
+        if (max <= BigInt(UINT32_RANGE)) return BigInt(randomInt(Number(max)));
+        const bits = (max - 1n).toString(2).length;
+        const leading = bits % 32 || 32;
+        let value;
+        do {
+            value = BigInt(randomInt(2 ** leading));
+            for (let remaining = bits - leading; remaining > 0; remaining -= 32) {
+                value = (value << 32n) + BigInt(randomInt(UINT32_RANGE));
+            }
+        } while (value >= max);
+        return value;
+    }
+
+    function chooseWeighted(values, weight, total, randomInt) {
+        let rank = randomBigInt(total, randomInt);
+        for (const value of values) {
+            const size = weight(value);
+            if (rank < size) return value;
+            rank -= size;
+        }
+        throw new RangeError('Random source returned a value outside the requested range.');
+    }
+
+    function enforceFixedLength(length, maxLength) {
+        if (maxLength !== null && length > maxLength) {
+            throw new RangeError(`Requested length exceeds the target maximum of ${maxLength} characters.`);
+        }
+    }
+
+    function preparePassword(settings) {
+        const { length, maxLength } = settings;
+        enforceFixedLength(length, maxLength);
+        const groups = getPasswordProfileGroups(settings);
+        const minimumTotal = groups.reduce((sum, group) => sum + group.minimum, 0);
+        if (length < minimumTotal) throw new RangeError('Length must be at least the number of required characters.');
+
+        if (groups.every(({ minimum }) => minimum === 1)) {
+            const sets = groups.map(({ pool }) => pool);
+            const entropy = calculatePasswordEntropy(length, sets);
+            const poolSize = sets.reduce((sum, set) => sum + set.length, 0);
+            // Reuse the simple sampler when acceptance is at least 1 in 32.
+            if (entropy >= length * Math.log2(poolSize) - 5) {
+                return { entropy, minLength: length, maxLength: length,
+                    generate: (randomInt) => generatePasswordBytes(length, sets, randomInt) };
+            }
+        }
+
+        // Count valid strings by class allocation. Binomial factors count all
+        // placements of that class and the power counts each character choice.
+        const choose = [[1n]];
+        for (let size = 1; size <= length; size++) {
+            choose.push(Array.from({ length: size + 1 }, (_, count) => (
+                (choose[size - 1][count - 1] ?? 0n) + (choose[size - 1][count] ?? 0n)
+            )));
+        }
+        const amounts = groups.map(({ minimum }) => Array.from({ length: length - minimum + 1 }, (_, i) => minimum + i));
+        const powers = groups.map(({ pool }) => Array.from({ length: length + 1 }, (_, count) => BigInt(pool.length) ** BigInt(count)));
+        const ways = Array.from({ length: groups.length + 1 }, () => Array(length + 1).fill(0n));
+        ways[groups.length][0] = 1n;
+        const weight = (group, remaining, count) => count <= remaining
+            ? choose[remaining][count] * powers[group][count] * ways[group + 1][remaining - count]
+            : 0n;
+        for (let group = groups.length - 1; group >= 0; group--) {
+            for (let remaining = 0; remaining <= length; remaining++) {
+                ways[group][remaining] = amounts[group].reduce((sum, count) => sum + weight(group, remaining, count), 0n);
+            }
+        }
+        function generate(randomInt = getSecureRandomInt) {
+            let remaining = length;
+            const counts = groups.map((_, group) => {
+                if (group === groups.length - 1) return remaining;
+                const count = chooseWeighted(amounts[group], (count) => weight(group, remaining, count), ways[group][remaining], randomInt);
+                remaining -= count;
+                return count;
+            });
+            const output = new Uint8Array(length);
+            for (let index = 0; index < output.length; index++) {
+                let rank = randomInt(length - index);
+                let group = 0;
+                while (rank >= counts[group]) rank -= counts[group++];
+                counts[group]--;
+                const { pool } = groups[group];
+                output[index] = pool.charCodeAt(randomInt(pool.length));
+            }
+            return output;
+        }
+        return { entropy: Math.log2(Number(ways[0][length])), minLength: length, maxLength: length, generate };
+    }
+
+    function passphraseEntropyDetails(settings, wordListSize, wordBits, constrained = false) {
+        const capitalizationBits = settings.capitalize && settings.randomizeCaps ? settings.count : 0;
+        const separatorBits = settings.separator === 'random' ? (settings.count - 1) * Math.log2(RANDOM_SEPARATOR_POOL.length) : 0;
+        // Different insertion histories can lead to the same output. Credit
+        // independent digit values only.
+        const digitBits = settings.insertNumbers
+            ? settings.numberCount * (settings.randomizePositions ? 1 : settings.count) * Math.log2(10)
+            : 0;
+        return { entropy: wordBits + capitalizationBits + separatorBits + digitBits,
+            entropyDetails: { wordBits, capitalizationBits, separatorBits, digitBits, wordListSize, constrained } };
+    }
+
+    const wordLengthCache = new WeakMap();
+
+    function groupWordIndicesByLength(words) {
+        if (wordLengthCache.has(words)) return wordLengthCache.get(words);
+        const byLength = new Map();
+        words.forEach((word, index) => {
+            if (!byLength.has(word.length)) byLength.set(word.length, []);
+            byLength.get(word.length).push(index);
+        });
+        const groups = Array.from(byLength, ([length, indices]) => ({ length, indices })).sort((a, b) => a.length - b.length);
+        wordLengthCache.set(words, groups);
+        return groups;
+    }
+
+    function prepareWordChoices(words, count, fixedLength, limit, mode, maxWordLength = null) {
+        const groups = groupWordIndicesByLength(words).filter(({ length }) => maxWordLength === null || length <= maxWordLength);
+        if (!groups.length) throw new RangeError('No words fit the selected maximum word length.');
+        const wordListSize = groups.reduce((total, group) => total + group.indices.length, 0);
+        const minLength = groups[0].length * count + fixedLength;
+        const uncappedMax = groups[groups.length - 1].length * count + fixedLength;
+        if (limit !== null && limit < minLength) {
+            throw new RangeError(`The target maximum of ${limit} characters is too short for these ${mode} settings.`);
+        }
+        const isFiltered = wordListSize !== words.length;
+        if (limit === null || limit >= uncappedMax) {
+            const indices = isFiltered ? groups.flatMap((group) => group.indices) : null;
+            return { wordListSize, wordBits: count * Math.log2(wordListSize), minLength, maxLength: uncappedMax,
+                constrained: isFiltered, makePicker: (randomInt) => indices ? () => indices[randomInt(indices.length)] : undefined };
+        }
+
+        // ways[slots][budget] counts all ordered word sequences fitting the
+        // remaining character budget. A branch counts the words in that length
+        // group times the number of continuations after choosing one.
+        const budget = limit - fixedLength;
+        const ways = [Array(budget + 1).fill(1n)];
+        const weight = (slots, remaining, group) => remaining < group.length ? 0n
+            : BigInt(group.indices.length) * ways[slots - 1][remaining - group.length];
+        for (let slots = 1; slots <= count; slots++) {
+            ways.push(Array.from({ length: budget + 1 }, (_, remaining) => (
+                groups.reduce((total, group) => total + weight(slots, remaining, group), 0n)
+            )));
+        }
+        const total = ways[count][budget];
+        let maxBudget = budget;
+        while (ways[count][maxBudget - 1] === total) maxBudget--;
+
+        function makePicker(randomInt) {
+            let remaining = budget;
+            return (index) => {
+                const slots = count - index;
+                const group = chooseWeighted(groups, (group) => weight(slots, remaining, group), ways[slots][remaining], randomInt);
+                remaining -= group.length;
+                return group.indices[randomInt(group.indices.length)];
+            };
+        }
+        return { wordListSize, wordBits: Math.log2(Number(total)), minLength, maxLength: maxBudget + fixedLength,
+            constrained: true, makePicker };
+    }
+
+    function preparePassphrase(settings, words) {
+        const list = passphraseWordlist(settings, words);
+        const digits = settings.insertNumbers ? settings.numberCount * (settings.randomizePositions ? 1 : settings.count) : 0;
+        const { wordListSize, wordBits, minLength, maxLength, constrained, makePicker } = prepareWordChoices(
+            list, settings.count, settings.count - 1 + digits, settings.maxLength, 'passphrase', settings.maxWordLength
+        );
+        return { ...passphraseEntropyDetails(settings, wordListSize, wordBits, constrained), minLength, maxLength,
+            generate: (randomInt = getSecureRandomInt) => writePassphrase(settings, list, randomInt, makePicker(randomInt)) };
+    }
+
+    function prepareUsername(settings, words) {
+        const list = getWordlist(words).words;
+        const fixedLength = (settings.count - 1) * settings.separator.length
+            + (settings.appendNumbers ? settings.numberCount + settings.separator.length : 0);
+        const { minLength, maxLength, makePicker } = prepareWordChoices(list, settings.count, fixedLength, settings.maxLength, 'username');
+        return { entropy: null, minLength, maxLength,
+            generate: (randomInt = getSecureRandomInt) => writeUsername(settings, list, randomInt, makePicker(randomInt)) };
+    }
+
+    function preparePattern(settings) {
+        const { tokens, totalLength, entropy, error } = parsePattern(settings.template, settings.maxLength ?? 1000);
+        if (error) throw new RangeError(error);
+        function generate(randomInt = getSecureRandomInt) {
+            const output = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const { pool, count } of tokens) {
+                if (pool.length === 1) {
+                    output.fill(pool.charCodeAt(0), offset, offset + count);
+                    offset += count;
+                } else {
+                    for (let index = 0; index < count; index++) output[offset++] = pool.charCodeAt(randomInt(pool.length));
+                }
+            }
+            return output;
+        }
+        return { entropy, minLength: totalLength, maxLength: totalLength, generate };
+    }
+
+    function prepareRawSecret(settings) {
+        const { byteLength, encoding, maxLength } = settings;
+        const length = encoding === 'hex' ? byteLength * 2
+            : encoding === 'base64' ? Math.ceil(byteLength / 3) * 4 : Math.ceil(byteLength * 4 / 3);
+        enforceFixedLength(length, maxLength);
+        function generate(randomInt) {
+            if (randomInt === undefined) return generateRawSecretBytes(settings);
+            return generateRawSecretBytes(settings, {
+                getRandomValues(bytes) {
+                    for (let index = 0; index < bytes.length; index++) bytes[index] = randomInt(256);
+                    return bytes;
+                }
+            });
+        }
+        return { entropy: byteLength * 8, minLength: length, maxLength: length, generate };
+    }
+
+    const PREPARE_MODE = Object.freeze({
+        password: preparePassword, passphrase: preparePassphrase, username: prepareUsername,
+        pattern: preparePattern, raw: prepareRawSecret
+    });
+
+    function prepareGenerationProfile(value, words) {
+        const profile = normalizeGenerationProfile(value);
+        const { mode, options } = profile;
+        return { profile, ...PREPARE_MODE[mode](options, words) };
+    }
+
     return Object.freeze({
         CHARS,
         DEFAULT_SYMS,
+        DEFAULT_PATTERN,
         CONFIG_FRIENDLY_SYMS,
         RANDOM_SEPARATOR_POOL,
         calculatePassphraseEntropy,
@@ -451,9 +782,12 @@
         generatePasswordBytes,
         generateRawSecretBytes,
         generateUsernameBytes,
+        getPasswordProfileCharsets,
         getSecureRandomInt,
+        normalizeGenerationProfile,
         normalizeSymbolPool,
         parsePattern,
+        prepareGenerationProfile,
         uniqueChars
     });
 }));

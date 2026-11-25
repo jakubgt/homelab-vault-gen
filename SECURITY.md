@@ -25,7 +25,7 @@ CI tests and builds artifacts with read-only repository permissions. Only the ow
 
 These controls reduce the impact of compromised non-administrator write access. They cannot prevent an account owner or attacker controlling that account from changing GitHub policy, approving malicious code, or publishing a new release. Secure the owner account and its recovery email with strong authentication, and review authorized apps, tokens, SSH/deploy keys, and collaborators. The application also cannot protect an updater already modified by an attacker with root access.
 
-Paranoid Mode conceals generated plaintext in the output and accessibility tree, clears on focus loss/page departure, and removes this app's saved preferences and presets. Its launch flag lives in the URL fragment. JavaScript strings, clipboard history, downloaded files, and browser-internal copies cannot be proven erased. Normal-mode settings and named presets include pattern literals; do not use existing secrets as patterns.
+Paranoid Mode conceals generated plaintext in the output and accessibility tree, clears on focus loss or page departure, and removes this app's saved preferences and presets. Its launch flag lives in the URL fragment. JavaScript strings, clipboard history, downloaded files, and browser-internal copies cannot be proven erased. The working pattern stays in memory. An explicitly saved named Pattern preset can retain its fixed literals. Use public literals for templates.
 
 CSV exports retain exact raw fields and require Text-column import in spreadsheet programs. The CSV acknowledgement does not sanitize formulas or prevent an importer from converting data. TXT and JSON avoid spreadsheet cell interpretation when used as their native formats.
 

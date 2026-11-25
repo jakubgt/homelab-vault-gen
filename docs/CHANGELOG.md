@@ -1,3 +1,14 @@
+# v2.5.0 — Portable generation profiles and safer defaults
+
+- Block credential generation on non-loopback HTTP. Trusted HTTPS, loopback, and the offline ZIP remain supported.
+- Keep working pattern text in memory, remove the legacy autosaved pattern field, and retain explicitly saved named templates.
+- Share versioned JSON generation profiles between the browser and CLI. Password policies support character exclusions, minimum counts by class, and an enforceable target length.
+- Show the possible passphrase length range and support shorter words and enforced output-length limits. The generator samples uniformly from the word sequences that fit.
+- Download the current credential as an exact TXT value or generate a fresh batch. Paranoid Mode disables file output.
+- Show which choices contribute to passphrase entropy and label the offline crack-time assumption in Details.
+
+---
+
 # v2.4.0 — Compact layout and organized source
 
 ## App layout

@@ -9,8 +9,10 @@ const core = require('../public/core.js');
 const HELP = `Homelab Vault — dependency-free local credential generation (Node.js 22+)
 
 Usage: node cli/vault.cjs [password|passphrase|username|pattern|raw] [options]
+       node cli/vault.cjs --profile FILE [--count N]
 
 Common:     --count N          1–1000 results, one exact value per line (default 1)
+            --profile FILE     Use a version 1 generation profile exported by the browser
 Password:   --length N         4–128 characters (default 24)
             --no-symbols       Uppercase, lowercase, and digits only
             --config-friendly  Use ._-+= as the symbol pool
@@ -45,7 +47,8 @@ function parse(argv) {
     if (argv.length === 1 && argv[0] === '--help') return { help: true };
     if (argv.length === 1 && argv[0] === '--version') return { version: true };
     const input = [...argv];
-    const mode = input[0] && !input[0].startsWith('--') ? input.shift() : 'password';
+    const hasMode = Boolean(input[0] && !input[0].startsWith('--'));
+    const mode = hasMode ? input.shift() : 'password';
     if (!['password', 'passphrase', 'username', 'pattern', 'raw'].includes(mode)) fail('Unknown generation mode. Use --help for usage.');
     const allowed = {
         password: ['--length', '--no-symbols', '--config-friendly'],
@@ -59,7 +62,7 @@ function parse(argv) {
     const seen = new Set();
     while (input.length) {
         const flag = input.shift();
-        if (flag !== '--count' && !allowed[mode].includes(flag)) fail('Unknown option for this mode. Use --help for usage.');
+        if (flag !== '--count' && flag !== '--profile' && !allowed[mode].includes(flag)) fail('Unknown option for this mode. Use --help for usage.');
         if (seen.has(flag)) fail('Duplicate options are not allowed.');
         seen.add(flag);
         if (flags.has(flag)) options[flag.slice(2)] = true;
@@ -69,6 +72,13 @@ function parse(argv) {
         }
     }
     options.count = integer(String(options.count), '--count', 1, 1000);
+    if (seen.has('--profile')) {
+        if (hasMode || [...seen].some(flag => flag !== '--profile' && flag !== '--count')) {
+            fail('--profile can be combined only with --count.');
+        }
+        if (!options.profile) fail('--profile requires a file path.');
+        return options;
+    }
     if (mode === 'password') {
         options.length = integer(options.length ?? '24', '--length', 4, 128);
         if (options['no-symbols'] && options['config-friendly']) fail('Choose either --no-symbols or --config-friendly.');
@@ -110,25 +120,60 @@ async function readTemplate(stream) {
     return Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
 }
 
-function generator(options, words) {
-    if (options.mode === 'password') {
-        const sets = [core.CHARS.upper, core.CHARS.lower, core.CHARS.nums];
-        if (!options['no-symbols']) sets.push(options['config-friendly'] ? core.CONFIG_FRIENDLY_SYMS : core.DEFAULT_SYMS);
-        return () => core.generatePasswordBytes(options.length, sets);
-    }
-    if (options.mode === 'passphrase') return () => core.generatePassphraseBytes({ count: options.words, separator: options.separator }, words);
-    if (options.mode === 'username') return () => core.generateUsernameBytes({ count: options.words, separator: options.separator, numberCount: options.digits, lowercase: Boolean(options.lowercase) }, words);
-    if (options.mode === 'raw') return () => core.generateRawSecretBytes({ byteLength: options.bytes, encoding: options.encoding });
-    const parsed = core.parsePattern(options.template);
-    if (parsed.error) fail('The template is invalid. Check the documented pattern syntax.');
-    return () => {
-        const bytes = new Uint8Array(parsed.totalLength);
+function readProfile(filename) {
+    const maxBytes = 16 * 1024;
+    const contents = Buffer.alloc(maxBytes + 1);
+    let descriptor;
+    try {
+        if (!fs.statSync(filename).isFile()) fail('The profile must be a regular JSON file.');
+        descriptor = fs.openSync(filename, 'r');
         let offset = 0;
-        for (const token of parsed.tokens) {
-            for (let index = 0; index < token.count; index++) bytes[offset++] = token.pool.charCodeAt(core.getSecureRandomInt(token.pool.length));
+        while (offset < contents.length) {
+            const length = fs.readSync(descriptor, contents, offset, contents.length - offset, null);
+            if (length === 0) break;
+            offset += length;
         }
-        return bytes;
-    };
+        if (offset > maxBytes) fail('The profile exceeds the maximum size.');
+        return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(contents.subarray(0, offset)));
+    } catch {
+        fail('Read a regular UTF-8 JSON profile file of at most 16 KiB.');
+    } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+        contents.fill(0);
+    }
+}
+
+function optionsProfile(options) {
+    const profile = { version: 1, mode: options.mode, options: {} };
+    if (options.mode === 'password') {
+        profile.options = {
+            length: options.length,
+            syms: !options['no-symbols'],
+            symbols: options['config-friendly'] ? core.CONFIG_FRIENDLY_SYMS : core.DEFAULT_SYMS
+        };
+    } else if (options.mode === 'passphrase') {
+        profile.options = { count: options.words, separator: options.separator };
+    } else if (options.mode === 'username') {
+        profile.options = { count: options.words, separator: options.separator, numberCount: options.digits, lowercase: Boolean(options.lowercase) };
+    } else if (options.mode === 'raw') {
+        profile.options = { byteLength: options.bytes, encoding: options.encoding };
+    } else {
+        profile.options = { template: options.template };
+    }
+    return profile;
+}
+
+function generator(options) {
+    const input = options.profile ? readProfile(options.profile) : optionsProfile(options);
+    try {
+        const profile = core.normalizeGenerationProfile(input);
+        const words = ['passphrase', 'username'].includes(profile.mode) ? loadWords() : undefined;
+        return core.prepareGenerationProfile(profile, words).generate;
+    } catch (error) {
+        if (options.profile) fail('The version 1 generation profile is invalid or its constraints cannot be met.');
+        if (options.mode === 'pattern') fail('The template is invalid. Check the documented pattern syntax.');
+        throw error;
+    }
 }
 
 async function main(argv, stdin = process.stdin, stdout = process.stdout) {
@@ -143,8 +188,7 @@ async function main(argv, stdin = process.stdin, stdout = process.stdout) {
     }
     if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') fail('Node.js 22 or newer with Web Crypto support is required.');
     if (options['template-stdin']) options.template = await readTemplate(stdin);
-    const words = ['passphrase', 'username'].includes(options.mode) ? loadWords() : null;
-    const generate = generator(options, words);
+    const generate = generator(options);
     let total = 0;
     for (let index = 0; index < options.count; index++) {
         const bytes = generate();

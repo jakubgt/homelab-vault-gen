@@ -246,6 +246,33 @@ test('invalid pattern removes the old result and disables transfer controls', as
     await expect(page.locator('#generation-error')).toBeHidden();
 });
 
+test('pattern drafts stay in memory while deliberately saved templates survive reload', async ({ page }) => {
+    const autosavedPattern = 'LEGACY-PATTERN-[0-9]{4}';
+    const namedPattern = 'NAMED-TEMPLATE-[0-9]{4}';
+    const workingPattern = 'WORKING-DRAFT-[0-9]{4}';
+    await page.addInitScript(({ autosavedPattern, namedPattern }) => {
+        if (sessionStorage.getItem('migration-fixture')) return;
+        sessionStorage.setItem('migration-fixture', 'true');
+        localStorage.setItem('vault_settings', JSON.stringify({ mode: 'pattern', patternStr: autosavedPattern }));
+        localStorage.setItem('vault_profiles', JSON.stringify([{ name: 'Named template', settings: { mode: 'pattern', patternStr: namedPattern } }]));
+    }, { autosavedPattern, namedPattern });
+    await page.goto('/');
+    await expect(page.locator('#pattern-privacy')).toBeVisible();
+    await expect(page.locator('#pattern-input')).not.toHaveValue(autosavedPattern);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vault_settings')))).not.toHaveProperty('patternStr');
+    await page.locator('#profile-select').selectOption('saved:0');
+    await expect(page.locator('#pattern-input')).toHaveValue(namedPattern);
+    await page.locator('#pattern-input').fill(workingPattern);
+    await expect(page.locator('#result')).toHaveText(/^WORKING-DRAFT-\d{4}$/);
+    const settings = await page.evaluate(() => localStorage.getItem('vault_settings'));
+    expect(settings).not.toContain(workingPattern);
+    expect(settings).not.toContain(namedPattern);
+    await page.reload();
+    await expect(page.locator('#pattern-input')).not.toHaveValue(workingPattern);
+    await page.locator('#profile-select').selectOption('saved:0');
+    await expect(page.locator('#pattern-input')).toHaveValue(namedPattern);
+});
+
 test('raw secrets encode the selected number of random bytes without losing entropy', async ({ page }) => {
     await page.goto('/');
     await page.locator('#tab-raw').click();
@@ -492,6 +519,24 @@ test('TXT bulk download preserves numeric credentials exactly', async ({ page })
     expect(await downloadText(download)).toBe(Array(3).fill('00001234567890123456789').join('\n'));
 });
 
+test('the current TXT download preserves displayed bytes without generating another credential', async ({ page }) => {
+    await page.goto('/');
+    await pattern(page, ' 0000-[A-Z]{16} ');
+    const secret = await page.locator('#result').textContent();
+    expect(secret).toMatch(/^ 0000-[A-Z]{16} $/);
+    await openDetails(page, '.export-panel');
+    const current = page.getByRole('button', { name: 'Download this credential (.txt)' });
+    const file = page.waitForEvent('download');
+    await current.click();
+    const download = await file;
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    expect(await downloadText(download)).toBe(secret);
+    expect(await page.locator('#result').textContent()).toBe(secret);
+    await expect(page.getByRole('group', { name: 'Generate and export new credentials' })).toBeVisible();
+    await page.locator('#opt-paranoid').check();
+    await expect(current).toBeDisabled();
+});
+
 test('JSON bulk download preserves formula-shaped credentials as strings', async ({ page }) => {
     await page.goto('/');
     await pattern(page, '=1+1');
@@ -611,6 +656,92 @@ test('target length limit reports an advisory without truncating the generated s
     await expect(page.locator('#result')).toHaveText('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     await expect(page.locator('#compatibility-warning')).toContainText('Exceeds the target limit by 18 characters');
     await expect(page.locator('#copy-btn')).toBeEnabled();
+});
+
+test('strict password policies apply class minimums, exclusions, and the target limit', async ({ page }) => {
+    await page.goto('/');
+    await openDetails(page, '#advanced-generation');
+    for (const [id, value] of [['password-exclude', '012345678'], ['password-min-nums', '4']]) {
+        await page.locator(`#${id}`).fill(value);
+        await page.locator(`#${id}`).blur();
+    }
+    const result = page.locator('#result');
+    await expect(result).toHaveText(/^[^0-8]{24}$/);
+    expect((await result.textContent()).match(/9/g).length).toBeGreaterThanOrEqual(4);
+    await openDetails(page, '#privacy-options');
+    await page.locator('#target-max-length').fill('12');
+    await page.locator('#target-max-length').blur();
+    await page.locator('#target-strict-length').check();
+    await expect(result).toBeEmpty();
+    await expect(page.locator('#generation-error')).toBeVisible();
+    await expect(page.locator('#copy-btn')).toBeDisabled();
+    await page.locator('#length-num').fill('12');
+    await page.locator('#length-num').blur();
+    await expect(result).toHaveText(/^[^0-8]{12}$/);
+    expect((await result.textContent()).match(/9/g).length).toBeGreaterThanOrEqual(4);
+});
+
+test('portable profiles round trip generation rules without credential or pattern text', async ({ page }) => {
+    await page.goto('/');
+    await openDetails(page, '#advanced-generation');
+    await page.locator('#password-exclude').fill('AB');
+    await page.locator('#password-exclude').blur();
+    await page.locator('#password-min-nums').fill('3');
+    await page.locator('#password-min-nums').blur();
+    const current = await page.locator('#result').textContent();
+    const getProfile = async () => {
+        const pending = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Export profile' }).click();
+        return downloadText(await pending);
+    };
+    const passwordProfile = await getProfile();
+    expect(passwordProfile).not.toContain(current);
+    const passwordRules = JSON.parse(passwordProfile);
+    expect(passwordRules).toMatchObject({ version: 1, mode: 'password', options: { length: 24, exclude: 'AB', minNums: 3 } });
+    expect(passwordRules.options).not.toHaveProperty('minUpper');
+
+    await pattern(page, 'EXCLUDE-THIS-LITERAL-[0-9]{4}');
+    const patternProfile = await getProfile();
+    expect(patternProfile).not.toContain('EXCLUDE-THIS-LITERAL');
+    expect(JSON.parse(patternProfile)).toMatchObject({ version: 1, mode: 'pattern' });
+    expect(JSON.parse(patternProfile).options).not.toHaveProperty('template');
+
+    await page.locator('#profile-import-file').setInputFiles({
+        name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(passwordProfile),
+    });
+    await expect(page.locator('#tab-pwd')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#password-exclude')).toHaveValue('AB');
+    await expect(page.locator('#password-min-nums')).toHaveValue('3');
+    await expect(page.locator('#password-min-upper')).toHaveValue('');
+    await expect(page.locator('#result')).toHaveText(/^[^AB]{24}$/);
+    await page.locator('#opt-upper').uncheck();
+    await expect(page.locator('#result')).toHaveText(/^[^A-Z]{24}$/);
+    await page.locator('#opt-paranoid').check();
+    await expect(page.locator('#profile-export-btn')).toBeDisabled();
+    await expect(page.locator('#profile-import-btn')).toBeDisabled();
+});
+
+test('passphrase range and entropy reflect the short-word and strict-length settings', async ({ page }) => {
+    await page.goto('/');
+    await chooseMode(page, 'pass');
+    const range = page.locator('#pass-length-range');
+    await expect(range).toContainText(/\b23\D+59\b/);
+    await openDetails(page, '#strength-details');
+    await expect(page.locator('#entropy-details-text')).toContainText(/77\.5[45]/);
+    await expect(page.locator('#crack-text')).toContainText(/100 billion guesses per second/i);
+    await openDetails(page, '#advanced-generation');
+    await page.locator('#pass-max-word-length').fill('4');
+    await page.locator('#pass-max-word-length').blur();
+    await expect(range).toContainText(/\b23\D+29\b/);
+    await expect(page.locator('#result')).toHaveText(/^[a-z]{3,4}(?:-[a-z]{3,4}){5}$/i);
+    await page.locator('#pass-max-word-length').fill('');
+    await page.locator('#pass-max-word-length').blur();
+    await openDetails(page, '#privacy-options');
+    await page.locator('#target-max-length').fill('32');
+    await page.locator('#target-max-length').blur();
+    await page.locator('#target-strict-length').check();
+    await expect(range).toContainText(/\b23\D+32\b/);
+    await expect(page.locator('#result')).toHaveText(/^.{23,32}$/);
 });
 
 test('saved presets are independent snapshots and survive a reload', async ({ page }) => {
@@ -808,7 +939,7 @@ test('About shows build and connection status with working local license links',
     }
 });
 
-test('a non-loopback HTTP origin shows the delivery warning without making a remote connection', async ({ page }) => {
+test('a non-loopback HTTP origin blocks credentials and explains the delivery requirement', async ({ page }) => {
     // Every request for this reserved .invalid host is fulfilled from the local
     // test server; the browser still observes a non-secure remote HTTP origin.
     await page.route('http://vault-test.invalid/**', async (route) => {
@@ -820,6 +951,13 @@ test('a non-loopback HTTP origin shows the delivery warning without making a rem
     expect(await page.evaluate(() => window.isSecureContext)).toBe(false);
     await expect(page.locator('#delivery-warning')).toBeVisible();
     await expect(page.locator('#delivery-warning')).toContainText('unencrypted HTTP');
+    await expect(page.locator('#generate-btn')).toBeDisabled();
+    await expect(page.locator('#result')).toBeEmpty();
+    await expect(page.locator('#copy-btn')).toBeDisabled();
+    await expect(page.locator('#qr-btn')).toBeDisabled();
+    await expect(page.locator('#download-current-btn')).toBeDisabled();
+    await page.keyboard.press('Space');
+    await expect(page.locator('#result')).toBeEmpty();
     await page.locator('.about-panel > summary').click();
     await expect(page.locator('#connection-info')).toHaveText('Connection: unencrypted HTTP');
 });
