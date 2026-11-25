@@ -37,9 +37,9 @@ An offline-first password, passphrase, username, pattern, and raw-secret generat
 
 ## Built from open-source research
 
-Our goal is to make Homelab Vault the ultimate offline credential generator for homelabs. Five GitHub searches surfaced 258 distinct public repositories across browser generators, self-hosted tools, command-line utilities, and password managers. We then reviewed the source at specific commits for a representative set of projects.
+Our goal is to make Homelab Vault the ultimate offline credential generator for homelabs. Our GitHub research surfaced 258 distinct public repositories across browser generators, self-hosted tools, command-line utilities, and password managers. We then reviewed the source at specific commits for a representative set of projects.
 
-The review shaped v2.5.0. KeePassXC and Bitwarden informed the rules for services with strict password limits. xkcdpass informed the short-word controls, Diceware informed the entropy breakdown, and Sandphase’s Entropy Generator showed why exporting a current value deserves its own action. [KeePassXC](https://github.com/keepassxreboot/keepassxc/tree/cd42236540c1cfca332c0f051d981acfdacf7b4e) · [Bitwarden](https://github.com/bitwarden/clients/tree/53249a154406b4eab0075e56d794c94df09a8577) · [xkcdpass](https://github.com/redacted/XKCD-password-generator/tree/b981361292ae7328313e116178acacc90680df5e) · [Diceware](https://github.com/grempe/diceware/tree/4dde0f71359ff7b1be6d23531806b53f252a7bc1) · [Entropy Generator](https://github.com/sandphase/entropy-generator/tree/e6140fed30903a57329db2e150ced74996018799)
+The review shaped v2.5.0. KeePassXC and Bitwarden informed the rules for services with strict password limits. xkcdpass informed the short-word controls, Diceware informed the entropy breakdown, and Sandphase’s Entropy Generator showed why exporting a current value deserves its own action.
 
 ## Use it
 
