@@ -9,9 +9,26 @@ node cli/vault.cjs passphrase --words 6
 node cli/vault.cjs username --words 2 --lowercase --separator -
 node cli/vault.cjs pattern --template '[A-Z]{3}-[0-9]{4}'
 node cli/vault.cjs raw --bytes 32 --encoding base64
+node cli/vault.cjs --profile ./service-profile.json --count 5
 ```
 
 Standard output contains only exact generated values, one per line, with a final newline. Errors go to standard error and produce a nonzero exit status. `--count` accepts 1–1,000 results. Pattern output is limited to 1,000 characters per result; total output is limited to 1 MiB. Invalid options are rejected rather than silently ignored. `--version` prints the package version.
+
+## Share a generation profile
+
+Export a profile from the browser's **Advanced generation** panel, or write a version 1 JSON file. `--profile` selects the mode and rules from that file. You can combine it with `--count`. This example generates 24-character passwords that contain at least two digits and exclude `I`, `l`, `1`, `O`, and `0`.
+
+```json
+{
+  "version": 1,
+  "mode": "password",
+  "options": { "length": 24, "maxLength": 24, "minNums": 2, "exclude": "Il1O0" }
+}
+```
+
+Profiles are UTF-8 JSON files up to 16 KiB. Mode options support the browser's generation rules, including `maxWordLength` and `maxLength` for passphrases. Maximum lengths count output characters. If fixed-length settings or required character counts make a policy impossible to satisfy, the command exits before printing any output.
+
+Browser-exported Pattern profiles omit the working template. A missing `template` uses the built-in example. A hand-authored Pattern profile can supply a template with public fixed text and random character classes.
 
 For raw secrets, `--bytes` accepts 32 (256 bits) or 64 (512 bits), and `--encoding` accepts `hex`, `base64`, or unpadded `base64url`. These are uniformly random bytes encoded for storage. Select a format required by the target application; this command does not create SSH private keys, signed JWTs, or algorithm-specific key pairs.
 

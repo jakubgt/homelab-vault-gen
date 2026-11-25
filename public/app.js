@@ -1,18 +1,12 @@
 'use strict';
 
 const {
-    CHARS,
     DEFAULT_SYMS,
+    DEFAULT_PATTERN,
     CONFIG_FRIENDLY_SYMS,
-    calculatePasswordEntropy,
-    calculatePassphraseEntropy,
-    generatePasswordBytes,
-    generatePassphraseBytes,
-    generateUsernameBytes,
-    generateRawSecretBytes,
-    getSecureRandomInt,
+    getPasswordProfileCharsets,
     normalizeSymbolPool,
-    parsePattern
+    prepareGenerationProfile
 } = VaultCore;
 
 const STORAGE_KEYS = Object.freeze({
@@ -21,6 +15,10 @@ const STORAGE_KEYS = Object.freeze({
     profiles: 'vault_profiles'
 });
 const MODES = Object.freeze(['pwd', 'pass', 'user', 'pattern', 'raw']);
+const PROFILE_MODES = Object.freeze({ pwd: 'password', pass: 'passphrase', user: 'username', pattern: 'pattern', raw: 'raw' });
+const PASSWORD_MINIMUMS = Object.freeze({ minUpper: 'upper', minLower: 'lower', minNums: 'nums', minSyms: 'syms' });
+const GUESSES_PER_SECOND = 100_000_000_000;
+const MAX_PROFILE_BYTES = 16 * 1024;
 
 const el = {
     result: document.getElementById('result'),
@@ -39,6 +37,7 @@ const el = {
     entropyText: document.getElementById('entropy-text'),
     strengthText: document.getElementById('strength-text'),
     crackText: document.getElementById('crack-text'),
+    entropyDetails: document.getElementById('entropy-details-text'),
     entropyBar: document.getElementById('entropy-bar'),
     tabPwd: document.getElementById('tab-pwd'),
     tabPass: document.getElementById('tab-pass'),
@@ -56,6 +55,9 @@ const el = {
     patternInput: document.getElementById('pattern-input'),
     symbolPreset: document.getElementById('symbol-preset'),
     symInput: document.getElementById('sym-input'),
+    passwordExclude: document.getElementById('password-exclude'),
+    passMaxWordLength: document.getElementById('pass-max-word-length'),
+    passLengthRange: document.getElementById('pass-length-range'),
     allowedCharacterPreview: document.getElementById('allowed-character-preview'),
     allowedCharacterCount: document.getElementById('allowed-character-count'),
     paranoidOverlay: document.getElementById('paranoid-overlay'),
@@ -66,6 +68,7 @@ const el = {
     qrClose: document.getElementById('qr-close'),
     qrContainer: document.getElementById('qr-container'),
     bulkCount: document.getElementById('bulk-count'),
+    downloadCurrent: document.getElementById('download-current-btn'),
     exportCsvBtn: document.getElementById('export-csv-btn'),
     exportTxtBtn: document.getElementById('export-txt-btn'),
     exportJsonBtn: document.getElementById('export-json-btn'),
@@ -73,6 +76,7 @@ const el = {
     clearCountdown: document.getElementById('clear-countdown'),
     outputLength: document.getElementById('output-length'),
     targetMaxLength: document.getElementById('target-max-length'),
+    strictLength: document.getElementById('target-strict-length'),
     compatibilityWarning: document.getElementById('compatibility-warning'),
     csvDialog: document.getElementById('csv-export-dialog'),
     csvAck: document.getElementById('csv-text-ack'),
@@ -84,6 +88,9 @@ const el = {
     profileName: document.getElementById('profile-name'),
     profileSave: document.getElementById('profile-save-btn'),
     profileDelete: document.getElementById('profile-delete-btn'),
+    profileExport: document.getElementById('profile-export-btn'),
+    profileImport: document.getElementById('profile-import-btn'),
+    profileFile: document.getElementById('profile-import-file'),
     resetSettingsBtn: document.getElementById('reset-settings-btn'),
     toast: document.getElementById('toast')
 };
@@ -116,9 +123,21 @@ let clearDeadline = 0;
 let countdownTimer = null;
 let bulkJob = null;
 let savedProfiles = [];
+let profileImportRequest = 0;
 
 function hasSecureRandom() {
     return Boolean(window.crypto && typeof window.crypto.getRandomValues === 'function');
+}
+
+function isLoopback() {
+    const hostname = location.hostname;
+    return ['localhost', 'localhost.', '[::1]'].includes(hostname) || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function canGenerateHere() {
+    return hasSecureRandom() && (location.protocol === 'file:'
+        || (location.protocol === 'http:' && isLoopback())
+        || (location.protocol === 'https:' && window.isSecureContext));
 }
 
 function isParanoid() {
@@ -164,6 +183,7 @@ function resetMetrics() {
     el.strengthText.className = '';
     el.crackText.textContent = 'Estimated offline crack time: —';
     el.poolInfo.textContent = '';
+    el.entropyDetails.textContent = '';
     el.entropyBar.value = 0;
     el.entropyBar.className = 'entropy-weak';
 }
@@ -172,13 +192,15 @@ function updateActionAvailability() {
     document.querySelectorAll('.controls input, .controls select, .controls button, .tabs button, #mode-select').forEach((control) => {
         if (control.id !== 'opt-paranoid' && control.id !== 'bulk-cancel-btn') control.disabled = Boolean(bulkJob);
     });
-    const canGenerate = hasSecureRandom();
+    const canGenerate = canGenerateHere();
     const hasResult = typeof currentResult === 'string' && currentResult.length > 0;
-    const allowFiles = hasResult && canGenerate && !isParanoid() && !bulkJob;
+    const allowProfileFiles = canGenerate && !isParanoid() && !bulkJob;
+    const allowFiles = hasResult && allowProfileFiles;
 
     el.generateBtn.disabled = !canGenerate || Boolean(bulkJob);
-    el.copyBtn.disabled = !hasResult;
-    el.qrBtn.disabled = !hasResult;
+    el.copyBtn.disabled = !hasResult || !canGenerate;
+    el.qrBtn.disabled = !hasResult || !canGenerate;
+    el.downloadCurrent.disabled = !allowFiles;
     el.exportCsvBtn.disabled = !allowFiles;
     el.exportTxtBtn.disabled = !allowFiles;
     el.exportJsonBtn.disabled = !allowFiles;
@@ -186,6 +208,9 @@ function updateActionAvailability() {
     el.paranoidOverlay.disabled = !hasResult;
     el.profileSave.disabled = isParanoid() || Boolean(bulkJob);
     el.profileDelete.disabled = isParanoid() || Boolean(bulkJob) || !el.profileSelect.value.startsWith('saved:');
+    el.profileExport.disabled = !allowProfileFiles;
+    el.profileImport.disabled = !allowProfileFiles;
+    el.profileFile.disabled = !allowProfileFiles;
 }
 
 function setParanoidReveal(revealed) {
@@ -217,6 +242,8 @@ function clearGenerationError() {
     el.patternInput.removeAttribute('aria-invalid');
     el.symInput.removeAttribute('aria-invalid');
     el.lengthNum.removeAttribute('aria-invalid');
+    el.targetMaxLength.removeAttribute('aria-invalid');
+    el.passMaxWordLength.removeAttribute('aria-invalid');
 }
 
 function setResult(value) {
@@ -270,83 +297,46 @@ function readIntField(id, min, max, fallback) {
     return Math.min(max, Math.max(min, value));
 }
 
-function getPasswordCharsets() {
-    const sets = [];
-    if (document.getElementById('opt-upper').checked) sets.push(CHARS.upper);
-    if (document.getElementById('opt-lower').checked) sets.push(CHARS.lower);
-    if (document.getElementById('opt-nums').checked) sets.push(CHARS.nums);
+function minimumField(field) {
+    return document.getElementById(`password-min-${PASSWORD_MINIMUMS[field]}`);
+}
 
-    if (document.getElementById('opt-syms').checked) {
-        const symbols = normalizeSymbolPool(el.symInput.value);
-        el.symInput.value = symbols;
-        if (!symbols) return { error: 'Add at least one printable ASCII symbol or turn off Symbols.' };
-        sets.push(symbols);
+function normalizeExclusions(value) {
+    return [...new Set(value.replace(/[^\x21-\x7e]/g, ''))].join('');
+}
+
+function getPasswordOptions() {
+    const options = {
+        length: lengths.pwd,
+        upper: document.getElementById('opt-upper').checked,
+        lower: document.getElementById('opt-lower').checked,
+        nums: document.getElementById('opt-nums').checked,
+        syms: document.getElementById('opt-syms').checked,
+        ambig: document.getElementById('opt-ambig').checked,
+        symbols: normalizeSymbolPool(el.symInput.value),
+        exclude: normalizeExclusions(el.passwordExclude.value)
+    };
+    for (const field of Object.keys(PASSWORD_MINIMUMS)) {
+        const input = minimumField(field);
+        if (input.value !== '') options[field] = input.valueAsNumber;
     }
-
-    const filtered = document.getElementById('opt-ambig').checked
-        ? sets.map((set) => set.replace(/[lI1O0]/g, '')).filter(Boolean)
-        : sets;
-
-    if (filtered.length === 0) return { error: 'Select at least one character set.' };
-    return { sets: filtered };
+    return options;
 }
 
 function updateAllowedCharacters() {
-    const selection = getPasswordCharsets();
-    const pool = selection.error ? '' : selection.sets.join('');
-    const preview = selection.error || pool;
-    el.allowedCharacterCount.textContent = selection.error ? '(unavailable)' : `(${pool.length})`;
+    let preview;
+    let count;
+    try {
+        preview = getPasswordProfileCharsets(getPasswordOptions()).join('');
+        count = `(${preview.length})`;
+    } catch (error) {
+        preview = error.message;
+        count = '(unavailable)';
+    }
+    el.allowedCharacterCount.textContent = count;
     if (el.allowedCharacterPreview.textContent !== preview) {
         el.allowedCharacterPreview.textContent = preview;
     }
-}
-
-function generatePassword(skipDomUpdate = false) {
-    wipeMemory();
-    const selection = getPasswordCharsets();
-
-    if (selection.error) {
-        if (!skipDomUpdate) setGenerationError(selection.error, document.getElementById('opt-syms').checked ? el.symInput : null);
-        return null;
-    }
-    if (lengths.pwd < selection.sets.length) {
-        if (!skipDomUpdate) setGenerationError('Length must be at least the number of selected character sets.', el.lengthNum);
-        return null;
-    }
-
-    try {
-        activeSecretBuffer = generatePasswordBytes(lengths.pwd, selection.sets);
-    } catch (error) {
-        if (!skipDomUpdate) setGenerationError(error.message);
-        return null;
-    }
-
-    const generatedText = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(generatedText);
-    return generatedText;
-}
-
-function generatePattern(skipDomUpdate = false) {
-    wipeMemory();
-    const analysis = parsePattern(el.patternInput.value);
-
-    if (analysis.error) {
-        if (!skipDomUpdate) setGenerationError(analysis.error, el.patternInput);
-        return null;
-    }
-
-    activeSecretBuffer = new Uint8Array(analysis.totalLength);
-    let offset = 0;
-
-    for (const token of analysis.tokens) {
-        for (let index = 0; index < token.count; index++) {
-            activeSecretBuffer[offset++] = token.pool.charCodeAt(getSecureRandomInt(token.pool.length));
-        }
-    }
-
-    const generatedText = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(generatedText);
-    return generatedText;
 }
 
 function getPassphraseOptions() {
@@ -357,66 +347,84 @@ function getPassphraseOptions() {
         randomizeCaps: document.getElementById('opt-pass-caps-rand').checked,
         insertNumbers: document.getElementById('opt-pass-nums').checked,
         numberCount: readIntField('pass-num-count', 1, 10, 2),
-        randomizePositions: document.getElementById('opt-pass-nums-rand').checked
+        randomizePositions: document.getElementById('opt-pass-nums-rand').checked,
+        maxWordLength: el.passMaxWordLength.value === '' ? null : el.passMaxWordLength.valueAsNumber
     };
 }
 
-function generatePassphrase(skipDomUpdate = false) {
-    wipeMemory();
-    activeSecretBuffer = generatePassphraseBytes(getPassphraseOptions(), WORDS);
-    const text = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(text);
-    return text;
-}
-
-function generateUsername(skipDomUpdate = false) {
-    wipeMemory();
-    activeSecretBuffer = generateUsernameBytes({
+function getUsernameOptions() {
+    return {
         count: lengths.user,
         separator: document.getElementById('opt-user-sep').value,
         appendNumbers: document.getElementById('opt-user-nums').checked,
         numberCount: readIntField('user-num-count', 1, 9, 3),
         lowercase: document.getElementById('opt-user-lower').checked
-    }, WORDS);
-    const text = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(text);
-    return text;
-}
-
-function generateValue(skipDomUpdate = false) {
-    if (currentMode === 'pwd') return generatePassword(skipDomUpdate);
-    if (currentMode === 'pass') return generatePassphrase(skipDomUpdate);
-    if (currentMode === 'user') return generateUsername(skipDomUpdate);
-    if (currentMode === 'raw') return generateRawSecret(skipDomUpdate);
-    return generatePattern(skipDomUpdate);
+    };
 }
 
 function getRawSecretOptions() {
     return { byteLength: Number(el.rawByteLength.value), encoding: el.rawEncoding.value };
 }
 
-function generateRawSecret(skipDomUpdate = false) {
+function collectGenerationProfile() {
+    let options;
+    switch (currentMode) {
+    case 'pwd': options = getPasswordOptions(); break;
+    case 'pass': options = getPassphraseOptions(); break;
+    case 'user': options = getUsernameOptions(); break;
+    case 'raw': options = getRawSecretOptions(); break;
+    default: options = { template: el.patternInput.value }; break;
+    }
+    if (el.strictLength.checked) {
+        if (el.targetMaxLength.value === '') throw new Error('Enter a target maximum length before enforcing it.');
+        options.maxLength = el.targetMaxLength.valueAsNumber;
+    }
+    return { version: 1, mode: PROFILE_MODES[currentMode], options };
+}
+
+function updatePassphraseRange(prepared) {
+    if (currentMode !== 'pass') return;
+    if (!prepared) {
+        el.passLengthRange.textContent = 'Possible length is unavailable with these settings.';
+        return;
+    }
+    const { minLength, maxLength } = prepared;
+    const range = minLength === maxLength ? String(minLength) : `${minLength}–${maxLength}`;
+    el.passLengthRange.textContent = `Possible length: ${range} characters.`;
+}
+
+function generationErrorInput(message) {
+    if (/target maximum|maxLength/i.test(message) || (el.strictLength.checked && /pattern output is too long/i.test(message))) return el.targetMaxLength;
+    if (currentMode === 'pattern') return el.patternInput;
+    if (currentMode === 'pass' && /word length|maxWordLength|no words/i.test(message)) return el.passMaxWordLength;
+    if (currentMode === 'pwd') {
+        if (/length/i.test(message)) return el.lengthNum;
+        if (/printable ASCII symbol/i.test(message)) return el.symInput;
+    }
+    return null;
+}
+
+function generateValue(prepared) {
     wipeMemory();
-    activeSecretBuffer = generateRawSecretBytes(getRawSecretOptions());
-    const text = new TextDecoder().decode(activeSecretBuffer);
-    if (!skipDomUpdate) setResult(text);
-    return text;
+    activeSecretBuffer = prepared.generate();
+    return new TextDecoder().decode(activeSecretBuffer);
 }
 
 function generate() {
     cancelBulkExport();
     if (currentMode === 'pwd') updateAllowedCharacters();
-    if (!hasSecureRandom()) {
-        setGenerationError('Secure generation is unavailable in this browser.');
-        return null;
-    }
+    if (!canGenerateHere()) return null;
     try {
-        clearGenerationError();
-        const text = generateValue();
-        if (text && currentMode !== 'user') calculateEntropyAndStrength();
-        return text;
+        const prepared = prepareGenerationProfile(collectGenerationProfile(), WORDS);
+        updatePassphraseRange(prepared);
+        const value = generateValue(prepared);
+        setResult(value);
+        if (prepared.entropy !== null) calculateEntropyAndStrength(prepared);
+        return value;
     } catch (error) {
-        setGenerationError(error.message || 'Generation failed.');
+        updatePassphraseRange(null);
+        const message = error.message || 'Generation failed.';
+        setGenerationError(message, generationErrorInput(message));
         return null;
     }
 }
@@ -430,8 +438,33 @@ function cancelBulkExport() {
     updateActionAvailability();
 }
 
+function downloadLocalFile(data, filename, type) {
+    const url = URL.createObjectURL(new Blob([data], { type: `${type};charset=utf-8` }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    try {
+        link.click();
+    } finally {
+        link.remove();
+        // Give browsers time to consume the download before releasing the Blob.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+}
+
+function downloadCurrentCredential() {
+    if (!currentResult || isParanoid() || !canGenerateHere() || bulkJob) return;
+    try {
+        downloadLocalFile(currentResult, 'homelab-vault-credential.txt', 'text/plain');
+        showToast('Downloaded the current credential as plaintext. Store the file securely.');
+    } catch (error) {
+        showToast('Download failed. Try copying the current credential instead.');
+    }
+}
+
 async function bulkExport(format, csvAcknowledged = false) {
-    if (isParanoid() || !hasSecureRandom() || bulkJob || !currentResult) return;
+    if (isParanoid() || !canGenerateHere() || bulkJob || !currentResult) return;
     if (format === 'csv' && !csvAcknowledged) {
         el.csvAck.checked = false;
         el.csvConfirm.disabled = true;
@@ -450,15 +483,14 @@ async function bulkExport(format, csvAcknowledged = false) {
     el.bulkProgressText.textContent = `0 / ${count}`;
     updateActionAvailability();
     try {
+        const prepared = prepareGenerationProfile(collectGenerationProfile(), WORDS);
         // Yield between short batches so cancellation and privacy events can run.
         while (results.length < count) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             if (job.cancelled || isParanoid() || job.revision !== generationRevision) return;
             const started = performance.now();
             do {
-                const result = generateValue(true);
-                if (!result) throw new Error('Check the generation settings.');
-                results.push(result);
+                results.push(generateValue(prepared));
             } while (results.length < count && results.length % 25 !== 0 && performance.now() - started < 8);
             el.bulkProgress.value = results.length;
             el.bulkProgressText.textContent = `${results.length} / ${count}`;
@@ -468,17 +500,9 @@ async function bulkExport(format, csvAcknowledged = false) {
             ? `\uFEFFCredential\r\n${results.map((result) => `"${result.replace(/"/g, '""')}"`).join('\r\n')}`
             : format === 'json' ? JSON.stringify(results, null, 2) : results.join('\n');
         const mime = { csv: 'text/csv', json: 'application/json', txt: 'text/plain' }[format];
-        const url = URL.createObjectURL(new Blob([output], { type: `${mime};charset=utf-8` }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `homelab_vault_${job.mode}_x${count}_${Date.now()}.${format}`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        // Give browsers time to consume the download before releasing the Blob.
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadLocalFile(output, `homelab_vault_${job.mode}_x${count}_${Date.now()}.${format}`, mime);
         setResult(results[results.length - 1]);
-        if (currentMode !== 'user') calculateEntropyAndStrength();
+        if (prepared.entropy !== null) calculateEntropyAndStrength(prepared);
         showToast(`Exported ${count} credentials. Store the file securely.`);
     } catch (error) {
         showToast(`Export failed. ${error.message}`);
@@ -521,38 +545,32 @@ function formatCrackTime(seconds) {
     return `${years.toExponential(1)} years`;
 }
 
-function calculateEntropyAndStrength() {
-    let entropy = 0;
-
+function calculateEntropyAndStrength(prepared) {
+    const { entropy, entropyDetails: details, maxLength, profile: { options } } = prepared;
     if (currentMode === 'pass') {
-        entropy = calculatePassphraseEntropy(getPassphraseOptions(), WORDS);
-
-        el.poolInfo.textContent = `${lengths.pass.toLocaleString()} words from a ${WORDS.length.toLocaleString()}-word list`;
+        el.poolInfo.textContent = `${options.count.toLocaleString()} words from a ${details.wordListSize.toLocaleString()}-word list`;
+        el.entropyDetails.textContent = [
+            `Words: ${details.wordBits.toFixed(2)} bits.`,
+            `Random capitalization: ${details.capitalizationBits.toFixed(2)} bits.`,
+            `Random separators: ${details.separatorBits.toFixed(2)} bits.`,
+            `Random digits: ${details.digitBits.toFixed(2)} bits.`,
+            options.maxLength !== null ? 'Only word combinations that fit the target length are eligible.' : ''
+        ].filter(Boolean).join(' ');
     } else if (currentMode === 'raw') {
-        const { byteLength, encoding } = getRawSecretOptions();
-        entropy = byteLength * 8;
+        const { byteLength, encoding } = options;
         const label = { hex: 'Hex', base64: 'Base64', base64url: 'Base64url' }[encoding];
         el.poolInfo.textContent = `${byteLength} random bytes · ${label} encoding`;
+        el.entropyDetails.textContent = `${byteLength} random bytes × 8 bits per byte.`;
     } else if (currentMode === 'pattern') {
-        const analysis = parsePattern(el.patternInput.value);
-        if (analysis.error) {
-            resetMetrics();
-            return;
-        }
-        entropy = analysis.entropy;
-        el.poolInfo.textContent = `Pattern output: ${analysis.totalLength.toLocaleString()} characters`;
+        el.poolInfo.textContent = `Pattern output: ${maxLength.toLocaleString()} characters`;
+        el.entropyDetails.textContent = 'Random character choices contribute entropy. Fixed literals contribute 0 bits.';
     } else {
-        const selection = getPasswordCharsets();
-        if (selection.error) {
-            resetMetrics();
-            return;
-        }
-        entropy = calculatePasswordEntropy(lengths.pwd, selection.sets);
-        const poolSize = selection.sets.reduce((sum, set) => sum + set.length, 0);
+        const poolSize = getPasswordProfileCharsets(options).reduce((sum, set) => sum + set.length, 0);
         el.poolInfo.textContent = `Character pool: ${poolSize.toLocaleString()} unique symbols`;
+        el.entropyDetails.textContent = 'Entropy counts the possible passwords that satisfy the selected character requirements.';
     }
 
-    const averageSeconds = Math.pow(2, entropy - 1) / 1e11;
+    const averageSeconds = Math.pow(2, entropy - 1) / GUESSES_PER_SECOND;
     let strength = 'Weak';
     let classSuffix = 'weak';
 
@@ -573,7 +591,7 @@ function calculateEntropyAndStrength() {
     el.entropyText.textContent = `${Math.round(entropy)} bits`;
     el.strengthText.textContent = strength;
     el.strengthText.className = `strength-${classSuffix}`;
-    el.crackText.textContent = `Estimated offline crack time: ${formatCrackTime(averageSeconds)}`;
+    el.crackText.textContent = `Estimated average offline crack time at 100 billion guesses per second: ${formatCrackTime(averageSeconds)}`;
     el.entropyBar.value = Math.min(128, entropy);
     el.entropyBar.className = `entropy-${classSuffix}`;
 }
@@ -756,7 +774,7 @@ function clearSavedPreferences() {
     }
 }
 
-function collectSettings() {
+function collectSettings(includeNamedTemplate = false) {
     return {
         mode: currentMode,
         lengths: { ...lengths },
@@ -770,20 +788,24 @@ function collectSettings() {
         ambig: document.getElementById('opt-ambig').checked,
         symbolPreset: el.symbolPreset.value,
         symPool: normalizeSymbolPool(el.symInput.value),
+        passwordExclude: normalizeExclusions(el.passwordExclude.value),
+        passwordMinimums: Object.fromEntries(Object.keys(PASSWORD_MINIMUMS).map((field) => [field, minimumField(field).value])),
         passCaps: document.getElementById('opt-pass-caps').checked,
         passCapsRand: document.getElementById('opt-pass-caps-rand').checked,
         passNums: document.getElementById('opt-pass-nums').checked,
         passNumsRand: document.getElementById('opt-pass-nums-rand').checked,
         passNumCount: document.getElementById('pass-num-count').value,
         passSep: document.getElementById('opt-pass-sep').value,
+        passMaxWordLength: el.passMaxWordLength.value,
         userNums: document.getElementById('opt-user-nums').checked,
         userLower: document.getElementById('opt-user-lower').checked,
         targetMaxLength: el.targetMaxLength.value,
+        strictLength: el.strictLength.checked,
         userNumCount: document.getElementById('user-num-count').value,
         userSep: document.getElementById('opt-user-sep').value,
         rawByteLength: Number(el.rawByteLength.value),
         rawEncoding: el.rawEncoding.value,
-        patternStr: el.patternInput.value
+        ...(includeNamedTemplate && currentMode === 'pattern' ? { patternStr: el.patternInput.value } : {})
     };
 
 }
@@ -811,6 +833,15 @@ function loadSettings() {
             return;
         }
 
+        if (Object.hasOwn(saved, 'patternStr')) {
+            // Existing named presets are separate and retain deliberately saved templates.
+            delete saved.patternStr;
+            try {
+                localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(saved));
+            } catch (error) {
+                // Readable preferences still apply if the browser blocks this write.
+            }
+        }
         applySettings(saved);
     } catch (error) {
         applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -818,7 +849,7 @@ function loadSettings() {
     }
 }
 
-function applySettings(saved) {
+function applySettings(saved, restorePattern = false) {
         const clamp = (value, min, max, fallback) => (
             Number.isInteger(value) && value >= min && value <= max ? value : fallback
         );
@@ -848,13 +879,19 @@ function applySettings(saved) {
         restoreBoolean(saved, 'passNumsRand', 'opt-pass-nums-rand');
         restoreBoolean(saved, 'userNums', 'opt-user-nums');
         restoreBoolean(saved, 'userLower', 'opt-user-lower');
+        el.strictLength.checked = saved.strictLength === true;
         el.targetMaxLength.value = saved.targetMaxLength ? readStoredNumber(saved.targetMaxLength, 1, 1000, '') : '';
 
+        el.passwordExclude.value = typeof saved.passwordExclude === 'string' ? normalizeExclusions(saved.passwordExclude) : '';
+        for (const field of Object.keys(PASSWORD_MINIMUMS)) {
+            minimumField(field).value = readStoredNumber(saved.passwordMinimums?.[field], 0, 128, '');
+        }
         if (saved.passNumCount !== undefined) document.getElementById('pass-num-count').value = readStoredNumber(saved.passNumCount, 1, 10, 2);
         if (saved.userNumCount !== undefined) document.getElementById('user-num-count').value = readStoredNumber(saved.userNumCount, 1, 9, 3);
         if (['-', '_', '.', ' ', 'random'].includes(saved.passSep)) document.getElementById('opt-pass-sep').value = saved.passSep;
+        el.passMaxWordLength.value = readStoredNumber(saved.passMaxWordLength, 1, 512, '');
         if (['', '-', '_', '.'].includes(saved.userSep)) document.getElementById('opt-user-sep').value = saved.userSep;
-        if (typeof saved.patternStr === 'string') el.patternInput.value = saved.patternStr.slice(0, 512);
+        if (restorePattern && typeof saved.patternStr === 'string') el.patternInput.value = saved.patternStr.slice(0, 512);
         el.rawByteLength.value = [32, 64].includes(saved.rawByteLength) ? String(saved.rawByteLength) : '32';
         el.rawEncoding.value = ['hex', 'base64', 'base64url'].includes(saved.rawEncoding) ? saved.rawEncoding : 'hex';
 
@@ -877,8 +914,7 @@ function readStoredNumber(value, min, max, fallback) {
 function checkSecureContext() {
     const available = hasSecureRandom();
     el.insecureWarning.classList.toggle('hidden', available);
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-    const remoteHttp = location.protocol === 'http:' && !local;
+    const remoteHttp = location.protocol === 'http:' && !isLoopback();
     document.getElementById('delivery-warning').classList.toggle('hidden', !remoteHttp);
     document.getElementById('connection-info').textContent = location.protocol === 'file:' ? 'Connection: local file'
         : remoteHttp ? 'Connection: unencrypted HTTP'
@@ -886,7 +922,7 @@ function checkSecureContext() {
     const build = globalThis.VAULT_BUILD || { version: 'unknown', commit: 'source' };
     document.getElementById('build-info').textContent = `Version ${build.version} · ${build.commit === 'source' ? 'source checkout' : `commit ${build.commit.slice(0, 12)}`}`;
     updateActionAvailability();
-    return available;
+    return canGenerateHere();
 }
 
 function renderProfiles() {
@@ -921,6 +957,95 @@ function persistProfiles() {
     }
 }
 
+function exportPortableProfile() {
+    if (isParanoid() || !canGenerateHere() || bulkJob) return;
+    try {
+        const recipe = collectGenerationProfile();
+        if (recipe.mode === 'pattern') delete recipe.options.template;
+        const { profile } = prepareGenerationProfile(recipe, WORDS);
+        const data = profile.mode === 'pattern' ? recipe : { ...profile, options: { ...profile.options } };
+        if (profile.mode === 'password') {
+            for (const field of Object.keys(PASSWORD_MINIMUMS)) {
+                if (!Object.hasOwn(recipe.options, field)) delete data.options[field];
+            }
+        }
+        downloadLocalFile(`${JSON.stringify(data, null, 2)}\n`, 'homelab-vault-profile.json', 'application/json');
+        showToast('Downloaded the generation profile.');
+    } catch (error) {
+        showToast(`Could not export this profile. ${error.message}`);
+    }
+}
+
+function applyPortableProfile(profile, suppliedOptions) {
+    const { mode, options } = profile;
+    const settings = collectSettings();
+    settings.mode = MODES.find((name) => PROFILE_MODES[name] === mode);
+    settings.strictLength = options.maxLength != null;
+    settings.targetMaxLength = options.maxLength ?? '';
+
+    switch (mode) {
+    case 'password':
+        settings.lengths.pwd = options.length;
+        for (const key of ['upper', 'lower', 'nums', 'syms', 'ambig']) settings[key] = options[key];
+        settings.symPool = options.symbols;
+        settings.symbolPreset = options.symbols === DEFAULT_SYMS ? 'default' : options.symbols === CONFIG_FRIENDLY_SYMS ? 'friendly' : 'custom';
+        settings.passwordExclude = options.exclude;
+        settings.passwordMinimums = Object.fromEntries(Object.keys(PASSWORD_MINIMUMS)
+            .filter((field) => Object.hasOwn(suppliedOptions, field))
+            .map((field) => [field, options[field]]));
+        break;
+    case 'passphrase':
+        settings.lengths.pass = options.count;
+        settings.passSep = options.separator;
+        settings.passCaps = options.capitalize;
+        settings.passCapsRand = options.randomizeCaps;
+        settings.passNums = options.insertNumbers;
+        settings.passNumCount = options.numberCount;
+        settings.passNumsRand = options.randomizePositions;
+        settings.passMaxWordLength = options.maxWordLength;
+        break;
+    case 'username':
+        settings.lengths.user = options.count;
+        settings.userSep = options.separator;
+        settings.userNums = options.appendNumbers;
+        settings.userNumCount = options.numberCount;
+        settings.userLower = options.lowercase;
+        break;
+    case 'raw':
+        settings.rawByteLength = options.byteLength;
+        settings.rawEncoding = options.encoding;
+        break;
+    case 'pattern':
+        settings.patternStr = options.template;
+        break;
+    }
+    applySettings(settings, true);
+    updateUI();
+    saveSettings();
+}
+
+async function importPortableProfile() {
+    const file = el.profileFile.files[0];
+    el.profileFile.value = '';
+    if (!file || isParanoid() || !canGenerateHere() || bulkJob) return;
+    const request = ++profileImportRequest;
+    if (file.size > MAX_PROFILE_BYTES) {
+        showToast('Choose a generation profile under 16 KiB.');
+        return;
+    }
+    const mayApply = () => request === profileImportRequest && !isParanoid() && canGenerateHere() && !bulkJob;
+    try {
+        const data = await file.text();
+        if (!mayApply()) return;
+        const supplied = JSON.parse(data);
+        const { profile } = prepareGenerationProfile(supplied, WORDS);
+        applyPortableProfile(profile, supplied.options);
+        showToast('Generation profile loaded.');
+    } catch (error) {
+        if (mayApply()) showToast('Could not read a valid generation profile from this file.');
+    }
+}
+
 function applyProfile(value) {
     const base = {
         mode: 'pwd', lengths: { pwd: 24, pass: 6, user: 2 },
@@ -929,7 +1054,7 @@ function applyProfile(value) {
         passNums: false, passNumsRand: true, passNumCount: 2, passSep: '-',
         userNums: true, userNumCount: 3, userSep: '', userLower: false,
         rawByteLength: 32, rawEncoding: 'hex',
-        targetMaxLength: '', patternStr: '[A-Z]{3}-[0-9]{4}-[a-z]{5}'
+        targetMaxLength: '', patternStr: DEFAULT_PATTERN
     };
     const presets = {
         balanced: {}, alphanumeric: { syms: false }, friendly: { symbolPreset: 'friendly' },
@@ -939,7 +1064,7 @@ function applyProfile(value) {
     };
     const profile = value.startsWith('saved:') ? savedProfiles[Number(value.slice(6))] : null;
     if (!profile && !Object.hasOwn(presets, value)) return;
-    applySettings(profile ? profile.settings : { ...base, ...presets[value] });
+    applySettings(profile ? profile.settings : { ...base, ...presets[value] }, true);
     updateUI();
     saveSettings();
     el.profileSelect.value = value;
@@ -948,6 +1073,7 @@ function applyProfile(value) {
 }
 
 function applyParanoidMode(active, updateAddress = true) {
+    profileImportRequest++;
     document.getElementById('opt-paranoid').checked = active;
     document.body.classList.toggle('paranoid-active', active);
     el.paranoidOverlay.classList.toggle('hidden', !active);
@@ -998,6 +1124,7 @@ function bindBoundedNumber(input, min, max, fallback) {
 el.themeBtn.addEventListener('click', toggleTheme);
 el.generateBtn.addEventListener('click', generate);
 el.copyBtn.addEventListener('click', copyResult);
+el.downloadCurrent.addEventListener('click', downloadCurrentCredential);
 
 el.length.addEventListener('input', () => {
     const value = Number.parseInt(el.length.value, 10);
@@ -1096,6 +1223,19 @@ el.symInput.addEventListener('input', () => {
     generate();
     saveSettings();
 });
+
+el.passwordExclude.addEventListener('input', () => {
+    const normalized = normalizeExclusions(el.passwordExclude.value);
+    if (el.passwordExclude.value !== normalized) el.passwordExclude.value = normalized;
+    generate();
+    saveSettings();
+});
+for (const input of [...Object.keys(PASSWORD_MINIMUMS).map(minimumField), el.passMaxWordLength]) {
+    input.addEventListener('input', () => {
+        generate();
+        saveSettings();
+    });
+}
 
 bindBoundedNumber(document.getElementById('pass-num-count'), 1, 10, 2);
 bindBoundedNumber(document.getElementById('user-num-count'), 1, 9, 3);
@@ -1213,10 +1353,18 @@ el.csvConfirm.addEventListener('click', () => {
 document.getElementById('csv-export-cancel').addEventListener('click', () => el.csvDialog.close());
 el.targetMaxLength.addEventListener('change', () => {
     if (el.targetMaxLength.value) el.targetMaxLength.value = readIntField('target-max-length', 1, 1000, '');
-    updateCompatibility();
+    if (el.strictLength.checked) generate();
+    else updateCompatibility();
+    saveSettings();
+});
+el.strictLength.addEventListener('change', () => {
+    generate();
     saveSettings();
 });
 el.profileSelect.addEventListener('change', () => applyProfile(el.profileSelect.value));
+el.profileExport.addEventListener('click', exportPortableProfile);
+el.profileImport.addEventListener('click', () => el.profileFile.click());
+el.profileFile.addEventListener('change', importPortableProfile);
 el.profileSave.addEventListener('click', () => {
     if (isParanoid()) return;
     const name = el.profileName.value.trim().slice(0, 40);
@@ -1226,7 +1374,7 @@ el.profileSave.addEventListener('click', () => {
         if (savedProfiles.length >= 20) { showToast('Delete a preset before adding another (maximum 20).'); return; }
         index = savedProfiles.length;
     }
-    savedProfiles[index] = { name, settings: collectSettings() };
+    savedProfiles[index] = { name, settings: collectSettings(true) };
     const persisted = persistProfiles();
     renderProfiles();
     el.profileSelect.value = `saved:${index}`;

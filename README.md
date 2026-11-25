@@ -10,7 +10,7 @@
 
 An offline-first password, passphrase, username, pattern, and raw-secret generator for homelabs. Everything runs in the browser: there is no backend, telemetry, CDN, or outbound application request after the local assets load. It generates credentials for your password manager or infrastructure; it does not store them.
 
-[Features](#highlights) · [Quick start](#quick-start) · [Raw secrets](#raw-secrets) · [CLI](#command-line-use) · [LAN HTTPS](#lan-https-with-caddy-on-a-debian-lxc) · [Security](#security-model) · [Tests](#tests)
+[Features](#highlights) · [Research](#built-from-open-source-research) · [Quick start](#quick-start) · [Raw secrets](#raw-secrets) · [CLI](#command-line-use) · [LAN HTTPS](#lan-https-with-caddy-on-a-debian-lxc) · [Security](#security-model) · [Tests](#tests)
 
 <p align="center">
   <img src="docs/screenshots/homelab-vault.png" alt="Homelab Vault in dark mode showing password generation, strength, character options, and privacy controls" width="480">
@@ -35,6 +35,12 @@ An offline-first password, passphrase, username, pattern, and raw-secret generat
 - Hardened NGINX and Caddy examples with a strict Content Security Policy.
 - A dependency-free CLI, runtime-only container packaging, and standalone web app installation on supported browsers.
 
+## Built from open-source research
+
+Our goal is to make Homelab Vault the ultimate offline credential generator for homelabs. Five GitHub searches surfaced 258 distinct public repositories across browser generators, self-hosted tools, command-line utilities, and password managers. We then reviewed the source at specific commits for a representative set of projects.
+
+The review shaped v2.5.0. KeePassXC and Bitwarden informed the rules for services with strict password limits. xkcdpass informed the short-word controls, Diceware informed the entropy breakdown, and Sandphase’s Entropy Generator showed why exporting a current value deserves its own action. [KeePassXC](https://github.com/keepassxreboot/keepassxc/tree/cd42236540c1cfca332c0f051d981acfdacf7b4e) · [Bitwarden](https://github.com/bitwarden/clients/tree/53249a154406b4eab0075e56d794c94df09a8577) · [xkcdpass](https://github.com/redacted/XKCD-password-generator/tree/b981361292ae7328313e116178acacc90680df5e) · [Diceware](https://github.com/grempe/diceware/tree/4dde0f71359ff7b1be6d23531806b53f252a7bc1) · [Entropy Generator](https://github.com/sandphase/entropy-generator/tree/e6140fed30903a57329db2e150ced74996018799)
+
 ## Use it
 
 1. Pick Password, Passphrase, Username, Pattern, or Raw secret.
@@ -42,19 +48,21 @@ An offline-first password, passphrase, username, pattern, and raw-secret generat
 3. Select **Generate** for another value, **Copy** for the clipboard, or **QR** for local transfer.
 4. Use **Clear now** whenever you finish. After copying, a countdown shows when the displayed result will clear. The app cannot erase OS clipboard history.
 
-The compact layout keeps the result, actions, Paranoid toggle, preset, and basic generation options together. Phones use the **Mode** picker instead of the desktop tab row. Open **Advanced generation**, **Privacy & output**, **Bulk export**, or **About & status** when needed. The strength row's **Details** disclosure shows the estimate breakdown.
+The compact layout keeps the result, actions, Paranoid toggle, preset, and basic generation options together. Phones use the **Mode** picker. Open **Advanced generation**, **Privacy & output**, **Downloads**, or **About & status** when needed. The strength row's **Details** disclosure shows the entropy breakdown and the assumption behind the offline crack-time estimate.
 
-Press <kbd>Space</kbd> outside a form control to generate again. The selected mode, preferences, and named presets are stored in this app's `localStorage` keys unless Paranoid Mode is active. Generated results are not saved there. **Pattern literals are settings:** never enter an existing secret in a pattern. Enabling Paranoid Mode removes this app's saved settings, theme, and presets while preserving unrelated origin storage.
+Press <kbd>Space</kbd> outside a form control to generate again. The selected mode and ordinary preferences are stored in this app's `localStorage` keys unless Paranoid Mode is active. The working pattern stays in memory. An explicitly saved named Pattern preset can retain its template, including any fixed text. Use public literals such as a service prefix. Enabling Paranoid Mode removes this app's saved settings, theme, and presets while preserving unrelated origin storage.
 
 **Preset** includes strong passwords, alphanumeric, config-friendly, six-word passphrases, and six-digit PINs. A PIN has much less entropy than the password/passphrase defaults; use it only where a target requires a PIN and limits guessing. You can save up to 20 named presets under **Advanced generation**; saving the same name replaces that preset. Presets save settings, not a generated result.
 
-**Target length limit** is an advisory compatibility check. It does not truncate, reject, or filter random outputs, so the generator's distribution is preserved. Adjust the generation options if the result is too long for the target. Password mode's pool preview and Pattern mode's output length describe the selected constraints.
+**Target length limit** is advisory unless you enable enforcement. An enforced limit rejects incompatible fixed-length settings and limits word-based generation to combinations that fit. Passphrase mode shows the possible length range and lets you use shorter words. Password mode supports explicit exclusions and required counts for each selected character class.
+
+Export a version 1 JSON profile from **Advanced generation** to move generation rules across browsers or use them with `node cli/vault.cjs --profile FILE`. The file contains generation settings. Portable Pattern profiles omit the working template and use the built-in example when imported. Named presets remain available for explicitly saving a template on the current device.
 
 **Start in Paranoid mode** adds `#paranoid` to the address. Bookmark that address for future private starts. The mode uses the URL fragment, not a stored preference, and conceals each new result until you select Reveal. Moving focus to another window, hiding the tab, or leaving the page clears the result and QR. Browser clipboard permission dialogs can also cause focus loss; generate again after granting access if needed.
 
-**Bulk export:** TXT contains one exact credential per line; JSON contains an array of exact strings. Both are unencrypted. CSV keeps the original values, but spreadsheet applications can interpret formulas, strip leading zeros, or round digits. CSV export requires acknowledgement that you will import the `Credential` column as **Text**. Do not open it directly as a spreadsheet; prefer TXT/JSON for interchange. No apostrophes or tabs are silently added to credentials. The progress indicator and Cancel export button remain responsive during generation.
+**Downloads.** Download the currently displayed credential as an exact plaintext TXT file or generate and export a fresh batch. Bulk TXT contains one exact credential per line and JSON contains an array of exact strings. CSV keeps the original values, which spreadsheet applications can interpret as formulas or numbers. Import the `Credential` column as **Text**. The progress indicator and cancel button remain responsive during batch generation. Paranoid Mode disables file output.
 
-**About & status** shows the app version, deployed source commit when available, delivery method, and licenses. It makes no network request to check for updates. Remote HTTP shows a warning; use trusted HTTPS for access from another device.
+**About & status** shows the app version, deployed source commit when available, delivery method, and licenses. It makes no network request to check for updates. Generation is disabled on remote HTTP. Use trusted HTTPS for access from another device.
 
 ## Raw secrets
 
@@ -82,7 +90,7 @@ Archives from v2.3.0 or earlier keep `index.html` at the archive root. The `publ
 Save the release ZIP, matching `.manifest.json`, and `SHA256SUMS` together in one directory. From a trusted source checkout or an earlier verified release, run the bundled verifier with Python 3.10 or newer:
 
 ```bash
-python3 -I scripts/verify-release.py --directory /path/to/downloads --version 2.4.0
+python3 -I scripts/verify-release.py --directory /path/to/downloads --version 2.5.0
 ```
 
 On Windows, use `python` in place of `python3` and pass your download directory. The command reports success only when both downloaded files match `SHA256SUMS`, the external and embedded manifests agree, and every archived file matches its declared size and SHA-256. It rejects unsafe or duplicate paths and never extracts or executes archive contents. Add `--commit FULL_40_CHARACTER_COMMIT_SHA` to require a reviewed source revision.
@@ -194,14 +202,14 @@ apt-get update &&
 apt-get install -y ca-certificates curl &&
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
   --output /root/install-homelab-vault.sh \
-  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.4.0/install-caddy-lxc.sh &&
+  https://raw.githubusercontent.com/jakubgt/homelab-vault-gen/v2.5.0/install-caddy-lxc.sh &&
 chmod 0700 /root/install-homelab-vault.sh &&
 /root/install-homelab-vault.sh
 ```
 
 The installer shows the LXC's addresses and asks for the stable IPv4 address without its CIDR suffix: enter `192.168.1.50`, not `192.168.1.50/24`.
 
-It then installs the required Debian tools, verifies that v2.4.0 is a published stable immutable release and that its exact commit belongs to protected `main`, and compares the downloaded installer with that revision. Python 3 parses the release metadata; it is not an application runtime dependency. The installer installs Caddy from its [official Debian repository](https://caddyserver.com/docs/install), stages the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation/rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved.
+It then installs the required Debian tools, verifies that v2.5.0 is a published stable immutable release and that its exact commit belongs to protected `main`, and compares the downloaded installer with that revision. Python 3 parses the release metadata. The installer stages the same revision's assets, validates the IP-specific configuration, enables the service, checks HTTPS locally, and prints the site URL and CA file digest. A lock prevents concurrent activation and rollback. It refuses to overwrite an unrelated Caddy configuration or web root and restores the previous site, version metadata, and Caddy configuration if startup fails. Existing Caddy CA data is preserved. [Caddy’s official Debian repository](https://caddyserver.com/docs/install)
 
 **Upgrading from v2.2.0 or earlier:** use the download-and-run block above once. The old `homelab-vault-update` command refuses the new protocol, so it cannot perform this migration itself. Enter the existing LXC IPv4 address when prompted. The installation preserves the Caddy CA and replaces the maintenance command with the hardened updater. An old `/opt` source checkout is left untouched; the new updater uses a temporary checkout.
 
@@ -271,7 +279,7 @@ homelab-vault-update
 
 `status` shows the installed version, full commit, IP, and Caddy state. `check-update` asks GitHub for its latest published stable release and reports its exact commit without changing the deployment. Release selection requires immutable metadata: drafts, prereleases, mutable releases, and bare Git tags are rejected. Before checking out a candidate or executing its installer, the updater verifies that GitHub reports `main` as protected, fetches that branch's complete history, and requires the candidate to be on its first-parent history. A changed branch tip or failed API request stops the update. Installer and assets use the same verified commit.
 
-To select a reviewed version explicitly, use `homelab-vault-update v2.4.0`. A deliberate commit selection uses `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`; it still requires protected-main history and the hardened protocol 2 (v2.2.1 onward), but does not require a release record. It cannot execute the older protocol 1 installers. Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
+To select a reviewed version explicitly, use `homelab-vault-update v2.5.0`. A deliberate commit selection uses `homelab-vault-update update FULL_40_CHARACTER_COMMIT_SHA`; it still requires protected-main history and the hardened protocol 2 (v2.2.1 onward), but does not require a release record. It cannot execute the older protocol 1 installers. Enter the current LXC IPv4 address when prompted. To change the IP without upgrading, rerun the currently deployed version explicitly. The updater stages runtime files, revalidates Caddy, and keeps the existing CA. Root-only deployment metadata lives with the site at `/srv/homelab-vault/.homelab-vault-deployment` and is hidden by Caddy.
 
 Repository ownership, protected-main administration, and authenticated GitHub delivery remain trusted. These checks do not defend against takeover of the owner account or modification of the installed updater by an attacker with root access.
 
@@ -385,7 +393,7 @@ These GitHub settings are external to Git and must be configured separately; com
 
 **Source layout changes in v2.4.0:** browser files now live in `public/`, the CLI is `cli/vault.cjs`, and Docker builds use `docker build -f deploy/Dockerfile .`. Root `docker compose up -d` and the LXC updater commands stay the same. Installed LXC and container web addresses are unchanged. The browser app still runs without an npm install or build step.
 
-To build a release locally, run `python3 -I scripts/build-release.py --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.4.0` from a clean checkout of that commit. Version declarations must agree. The read-only release workflow validates the revision and prepares the archive, checksums, and manifest. The owner publishes them explicitly using the release guide. See [changelog](docs/CHANGELOG.md) for v2.4.0 changes.
+To build a release locally, run `python3 -I scripts/build-release.py --version 2.5.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.5.0` from a clean checkout of that commit. Version declarations must agree. The read-only release workflow validates the revision and prepares the archive, checksums, and manifest. The owner publishes them explicitly. [Release guide](docs/RELEASING.md) · [Changelog](docs/CHANGELOG.md)
 
 See [third-party notices](public/THIRD_PARTY_NOTICES.md) for source, digest, and license information for vendored assets, and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

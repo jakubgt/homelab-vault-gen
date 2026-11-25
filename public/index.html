@@ -43,7 +43,7 @@
             This browser does not expose <code>crypto.getRandomValues</code>, so generation has been disabled. Use a current version of Chrome, Edge, Firefox, or Safari.
         </div>
 
-        <div id="delivery-warning" class="warning-banner hidden" role="alert">This page was delivered over unencrypted HTTP. Use trusted HTTPS before generating credentials on another device.</div>
+        <div id="delivery-warning" class="warning-banner hidden" role="alert">Generation is disabled over unencrypted HTTP. Open this app over trusted HTTPS or use the local offline copy.</div>
 
         <div class="mobile-mode">
             <label for="mode-select">Mode</label>
@@ -71,7 +71,7 @@
         </section>
 
         <div class="action-group">
-            <button type="button" class="action-btn" id="generate-btn" title="Press Space outside a control to generate again">Generate</button>
+            <button type="button" class="action-btn" id="generate-btn" title="Press Space outside a control to generate again" disabled>Generate</button>
             <button type="button" class="action-btn success-btn" id="copy-btn" disabled>Copy</button>
             <button type="button" class="action-btn secondary-btn" id="qr-btn" aria-label="Show QR" disabled>QR</button>
         </div>
@@ -84,7 +84,8 @@
             <details id="strength-details" class="strength-details">
                 <summary>Details</summary>
                 <div class="strength-breakdown">
-                    <p id="crack-text">Estimated offline crack time: Instant</p>
+                    <p id="entropy-details-text" class="pool-info"></p>
+                    <p id="crack-text"></p>
                     <p id="pool-info" class="pool-info"></p>
                 </div>
             </details>
@@ -125,7 +126,8 @@
             <section id="pattern-options" class="options-grid" role="tabpanel" aria-labelledby="tab-pattern" hidden>
                 <div class="full-width-opt">
                     <label class="field-label" for="pattern-input">Pattern format</label>
-                    <input type="text" id="pattern-input" class="full-width-input" value="[A-Z]{3}-[0-9]{4}-[a-z]{5}" maxlength="512" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="pattern-help">
+                    <input type="text" id="pattern-input" class="full-width-input" value="[A-Z]{3}-[0-9]{4}-[a-z]{5}" maxlength="512" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="pattern-privacy pattern-help">
+                    <p id="pattern-privacy" class="opt-desc no-indent">Never enter an existing credential. Saving a named preset can include literal text from this field.</p>
                 </div>
             </section>
 
@@ -151,6 +153,7 @@
                         <option value=" ">Space</option>
                         <option value="random">Random symbol (+entropy)</option>
                     </select>
+                    <p id="pass-length-range" class="opt-desc no-indent" role="status"></p>
                 </div>
             </section>
 
@@ -196,13 +199,35 @@
                             <label for="sym-input" class="visually-hidden">Custom symbols</label>
                             <input type="text" id="sym-input" class="full-width-input hidden" value="!@#$%^&amp;*()-_=+[]{};:,.&lt;&gt;/?|~" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
                         </div>
+                        <div class="full-width-opt">
+                            <label class="field-label" for="password-exclude">Exclude specific characters</label>
+                            <input type="text" id="password-exclude" class="full-width-input" maxlength="94" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="password-exclude-help">
+                            <p id="password-exclude-help" class="opt-desc no-indent">Enter printable ASCII characters without spaces. They are removed from every selected set.</p>
+                        </div>
+                        <fieldset class="full-width-opt class-minimums" aria-describedby="class-minimums-help">
+                            <legend>Minimum per character set</legend>
+                            <div class="class-counts">
+                                <label>Uppercase<input type="number" id="password-min-upper" min="0" max="128" placeholder="Auto" inputmode="numeric" autocomplete="off"></label>
+                                <label>Lowercase<input type="number" id="password-min-lower" min="0" max="128" placeholder="Auto" inputmode="numeric" autocomplete="off"></label>
+                                <label>Numbers<input type="number" id="password-min-nums" min="0" max="128" placeholder="Auto" inputmode="numeric" autocomplete="off"></label>
+                                <label>Symbols<input type="number" id="password-min-syms" min="0" max="128" placeholder="Auto" inputmode="numeric" autocomplete="off"></label>
+                            </div>
+                            <p id="class-minimums-help" class="opt-desc no-indent">Auto requires one character from each selected set.</p>
+                        </fieldset>
                         <details id="allowed-characters" class="full-width-opt allowed-characters">
                             <summary>Allowed characters <span id="allowed-character-count"></span></summary>
                             <code id="allowed-character-preview" aria-live="polite" aria-atomic="true"></code>
-                            <p class="opt-desc no-indent">Reflects selected character sets and ambiguous-character exclusions.</p>
+                            <p class="opt-desc no-indent">Reflects selected character sets and exclusions.</p>
                         </details>
                     </div>
                     <div id="pass-advanced" class="options-grid" hidden>
+                        <div class="full-width-opt">
+                            <div class="amount-row">
+                                <label for="pass-max-word-length">Maximum word length</label>
+                                <input type="number" id="pass-max-word-length" min="1" max="512" class="num-mini" placeholder="Any" inputmode="numeric" autocomplete="off" aria-describedby="pass-word-length-help">
+                            </div>
+                            <p id="pass-word-length-help" class="opt-desc no-indent">Draws from words within this limit. The entropy estimate uses the resulting word list.</p>
+                        </div>
                         <div id="opt-pass-caps-rand-wrapper">
                             <label><input type="checkbox" id="opt-pass-caps-rand"> Randomize caps</label>
                             <p class="opt-desc">Capitalizes a random subset of words when capitalization is enabled.</p>
@@ -241,7 +266,16 @@
                             <button id="profile-save-btn" class="secondary-btn bulk-btn" type="button">Save preset</button>
                             <button id="profile-delete-btn" class="text-btn" type="button" disabled>Delete preset</button>
                         </div>
-                        <p class="metric-note">Saves settings, including pattern literals, on this device. Never put an existing secret in a pattern. Saved presets are removed when Paranoid mode is enabled.</p>
+                        <p class="opt-desc no-indent">Named presets are stored on this device. Enabling Paranoid mode removes them.</p>
+                        <div class="profile-file-actions" role="group" aria-labelledby="portable-profiles-heading">
+                            <h3 id="portable-profiles-heading">Portable profiles</h3>
+                            <p class="opt-desc no-indent">JSON profiles carry generation rules between this app and the CLI. The app leaves credentials and pattern text out of exports.</p>
+                            <div class="setting-row file-actions">
+                                <button id="profile-export-btn" class="secondary-btn bulk-btn" type="button" disabled>Export profile</button>
+                                <button id="profile-import-btn" class="secondary-btn bulk-btn" type="button" disabled>Import profile</button>
+                            </div>
+                            <input id="profile-import-file" type="file" accept=".json,application/json" aria-label="Import profile file" hidden>
+                        </div>
                     </section>
                 </div>
             </details>
@@ -254,9 +288,10 @@
                     <p class="opt-desc no-indent">The address keeps this mode active after reload. Bookmark it for private starts.</p>
                     <div class="setting-row">
                         <label for="target-max-length">Target length limit</label>
-                        <input type="number" id="target-max-length" min="1" max="1000" class="num-clear" placeholder="None" inputmode="numeric" autocomplete="off">
+                        <input type="number" id="target-max-length" min="1" max="1000" class="num-clear" placeholder="None" inputmode="numeric" autocomplete="off" aria-describedby="target-length-help">
                     </div>
-                    <p class="metric-note">Compatibility check only: reports values that exceed your target's limit. Never truncates or filters generated credentials.</p>
+                    <label><input type="checkbox" id="target-strict-length" aria-describedby="target-length-help"> Enforce target length limit</label>
+                    <p id="target-length-help" class="opt-desc no-indent">The limit shows a compatibility warning by default. Turn on enforcement to generate only results that fit.</p>
                     <div class="setting-row">
                         <label for="clear-time">Clear after copy</label>
                         <select id="clear-time">
@@ -273,18 +308,24 @@
             </details>
 
             <details class="export-panel disclosure">
-                    <summary>Bulk export</summary>
-                    <div class="disclosure-body">
-                    <p>Downloads unencrypted credentials. TXT and JSON preserve exact values. Files are disabled in Paranoid mode.</p>
-                    <div class="setting-row export-row">
-                        <label for="bulk-count">Count</label>
-                        <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50" inputmode="numeric" autocomplete="off">
-                        <button type="button" class="secondary-btn bulk-btn" id="export-csv-btn" disabled>CSV</button>
-                        <button type="button" class="secondary-btn bulk-btn" id="export-txt-btn" disabled>TXT</button>
-                        <button type="button" class="secondary-btn bulk-btn" id="export-json-btn" disabled>JSON</button>
+                <summary>Downloads</summary>
+                <div class="disclosure-body">
+                    <p id="downloads-help">Downloads contain unencrypted credentials. File actions are disabled in Paranoid mode.</p>
+                    <div class="file-actions">
+                        <button type="button" class="secondary-btn bulk-btn" id="download-current-btn" aria-describedby="downloads-help" disabled>Download this credential (.txt)</button>
                     </div>
-                    <div id="bulk-status" class="hidden" role="status"><progress id="bulk-progress" max="100" value="0" aria-label="Bulk generation progress"></progress><span id="bulk-progress-text"></span><button type="button" id="bulk-cancel-btn" class="text-btn">Cancel export</button></div>
+                    <div role="group" aria-labelledby="bulk-export-heading">
+                        <h2 id="bulk-export-heading">Generate and export new credentials</h2>
+                        <div class="setting-row export-row">
+                            <label for="bulk-count">Count</label>
+                            <input type="number" id="bulk-count" class="num-clear" min="1" max="10000" value="50" inputmode="numeric" autocomplete="off">
+                            <button type="button" class="secondary-btn bulk-btn" id="export-csv-btn" disabled>CSV</button>
+                            <button type="button" class="secondary-btn bulk-btn" id="export-txt-btn" disabled>TXT</button>
+                            <button type="button" class="secondary-btn bulk-btn" id="export-json-btn" disabled>JSON</button>
+                        </div>
+                        <div id="bulk-status" class="hidden" role="status"><progress id="bulk-progress" max="100" value="0" aria-label="Bulk generation progress"></progress><span id="bulk-progress-text"></span><button type="button" id="bulk-cancel-btn" class="text-btn">Cancel export</button></div>
                     </div>
+                </div>
             </details>
         </div>
 

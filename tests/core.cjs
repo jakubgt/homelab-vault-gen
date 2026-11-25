@@ -10,6 +10,7 @@ const core = require('../public/core.js');
 const words = ['alpha', 'bravo', 'charlie', 'delta'];
 const decode = (bytes) => new TextDecoder().decode(bytes);
 const phrase = { count: 3 };
+const profile = (mode, options) => ({ version: 1, mode, options });
 
 function sequence(values) {
     let cursor = 0;
@@ -283,4 +284,81 @@ test('maximum word and digit settings produce complete bounded output', () => {
     assert.equal(decode(core.generatePassphraseBytes(passOptions, ['a'], () => 0)), Array(20).fill('A0000000000').join('-'));
     const userOptions = { count: 10, appendNumbers: true, numberCount: 9, separator: '.', lowercase: true };
     assert.equal(decode(core.generateUsernameBytes(userOptions, ['a'], () => 0)), `${Array(10).fill('a').join('.')}.000000000`);
+});
+
+test('profile validation accepts only versioned generation settings', () => {
+    const settings = { upper: false, syms: false, exclude: '99' };
+    const normalized = core.normalizeGenerationProfile(profile('password', settings));
+    assert.equal(normalized.options.minUpper, 0);
+    assert.equal(normalized.options.minSyms, 0);
+    assert.equal(normalized.options.minNums, 1);
+    assert.equal(normalized.options.exclude, '9');
+    assert.equal(normalized.options.maxLength, null);
+    assert.deepEqual(core.normalizeGenerationProfile(JSON.parse(JSON.stringify(normalized))), normalized);
+    assert.throws(() => core.normalizeGenerationProfile({ ...normalized, version: 2 }), /version/);
+    assert.throws(() => core.normalizeGenerationProfile({ ...normalized, result: 'secret' }), /unsupported field/);
+    assert.throws(() => core.normalizeGenerationProfile(profile('raw', { result: 'secret' })), /unsupported field/);
+});
+
+test('password profiles count all legal placements and character choices under class minima', () => {
+    const options = { length: 4, upper: false, lower: false, symbols: '!@', exclude: '23456789', minNums: 2, minSyms: 1, maxLength: 4 };
+    const prepared = core.prepareGenerationProfile(profile('password', options));
+    assert.deepEqual(core.getPasswordProfileCharsets(options), ['01', '!@']);
+    assert.equal(prepared.entropy, Math.log2(160)); // (6 + 4) allocations, 2 choices at each position
+    const first = sequence([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const last = sequence([159, 0, 0, 0, 0, 0, 0, 0, 0]);
+    assert.equal(decode(prepared.generate(first)), '00!!');
+    assert.equal(decode(prepared.generate(last)), '000!');
+    first.done();
+    last.done();
+    assert.throws(() => core.prepareGenerationProfile(profile('password', { ...options, minNums: 4 })), /required characters/);
+    assert.throws(() => core.prepareGenerationProfile(profile('password', { ...options, maxLength: 3 })), /target maximum/);
+    assert.throws(() => core.prepareGenerationProfile(profile('password', { ...options, exclude: '0123456789' })), /no allowed characters/);
+    assert.throws(() => core.prepareGenerationProfile(profile('password', { ...options, nums: false })), /positive minimum/);
+});
+
+test('passphrase profiles report actual range and count only word sequences that fit a cap', () => {
+    const list = ['aa', 'bb', 'cccc'];
+    const options = { count: 3, capitalize: false };
+    const unconstrained = core.prepareGenerationProfile(profile('passphrase', options), list);
+    assert.equal(unconstrained.minLength, 8);
+    assert.equal(unconstrained.maxLength, 14);
+    assert.equal(unconstrained.entropy, 3 * Math.log2(3));
+    const capped = core.prepareGenerationProfile(profile('passphrase', { ...options, maxLength: 11 }), list);
+    assert.equal(capped.minLength, 8);
+    assert.equal(capped.maxLength, 10);
+    assert.equal(capped.entropy, Math.log2(20)); // 8 all-short and 12 with exactly one long word
+    assert.equal(capped.entropyDetails.constrained, true);
+    assert.equal(decode(capped.generate(() => 0)), 'aa-aa-aa');
+    assert.equal(decode(capped.generate((max) => max - 1)), 'cccc-bb-bb');
+    assert.equal(decode(capped.generate(() => 0)), 'aa-aa-aa'); // the budget resets for each draw
+    assert.throws(() => core.prepareGenerationProfile(profile('passphrase', { ...options, maxLength: 7 }), list), /too short/);
+    const shorter = core.prepareGenerationProfile(profile('passphrase', {
+        count: 3, maxWordLength: 2, randomizeCaps: true, insertNumbers: true, numberCount: 2
+    }), list);
+    assert.equal(shorter.minLength, 10);
+    assert.equal(shorter.maxLength, 10);
+    assert.deepEqual(shorter.entropyDetails, { wordBits: 3, capitalizationBits: 3, separatorBits: 0,
+        digitBits: 2 * Math.log2(10), wordListSize: 2, constrained: true });
+    assert.equal(shorter.entropy, 6 + 2 * Math.log2(10));
+});
+
+test('preparation shares pattern execution and enforces username and raw length caps', () => {
+    const pattern = core.prepareGenerationProfile(profile('pattern', { template: 'ID-[A-C]{2}', maxLength: 5 }));
+    const draw = sequence([1, 2]);
+    assert.equal(decode(pattern.generate(draw)), 'ID-BC');
+    draw.done();
+    assert.equal(pattern.minLength, 5);
+    assert.throws(() => core.prepareGenerationProfile(profile('pattern', { template: 'LITERAL', maxLength: 6 })), /output is too long/);
+    assert.equal(core.prepareGenerationProfile(profile('pattern', {})).maxLength, 14);
+
+    const username = core.prepareGenerationProfile(profile('username', { separator: '-', maxLength: 9 }), ['a', 'bb', 'cccc']);
+    assert.equal(username.entropy, null);
+    assert.equal(username.minLength, 7);
+    assert.equal(username.maxLength, 9);
+    assert.equal(decode(username.generate(() => 0)), 'A-A-000');
+    const raw = core.prepareGenerationProfile(profile('raw', { encoding: 'base64url', maxLength: 43 }));
+    assert.equal(raw.entropy, 256);
+    assert.equal(decode(raw.generate(() => 0)), 'A'.repeat(43));
+    assert.throws(() => core.prepareGenerationProfile(profile('raw', { encoding: 'base64url', maxLength: 42 })), /target maximum/);
 });

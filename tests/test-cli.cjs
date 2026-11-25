@@ -61,6 +61,52 @@ test('raw encodings decode to exactly the requested random-byte count', () => {
     }
 });
 
+test('profile files apply password rules and passphrase limits without a browser', () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-profiles-'));
+    const profile = path.join(temporary, 'profile.json');
+    const write = (mode, options) => fs.writeFileSync(profile, JSON.stringify({ version: 1, mode, options }));
+    try {
+        write('password', { length: 10, maxLength: 10, syms: false, exclude: 'lI1O0', minNums: 6 });
+        for (const password of values(['--profile', profile, '--count', '4'], 4)) {
+            assert.match(password, /^(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]{10}$/);
+            assert.doesNotMatch(password, /[lI1O0]/);
+            assert.ok(password.replace(/\D/g, '').length >= 6);
+        }
+
+        write('passphrase', { count: 6, capitalize: false, maxWordLength: 5, maxLength: 25 });
+        for (const phrase of values(['--profile', profile, '--count', '4'], 4)) {
+            assert.match(phrase, /^(?:[a-z]{3,5}-){5}[a-z]{3,5}$/);
+            assert.ok(phrase.length <= 25);
+        }
+
+        write('pattern', {});
+        assert.match(values(['--profile', profile])[0], /^[A-Z]{3}-[0-9]{4}-[a-z]{5}$/);
+
+        const invalid = [
+            ['password', '--profile', profile], ['--profile', profile, '--length', '16'],
+            ['--profile', profile, '--profile', profile], ['--profile', temporary],
+        ];
+        for (const args of invalid) {
+            const result = run(args);
+            assert.equal(result.status, 1);
+            assert.equal(result.stdout, '');
+        }
+
+        write('password', { length: 6, minNums: 6, syms: false });
+        assert.equal(run(['--profile', profile]).status, 1);
+        write('pattern', { template: 'DO-NOT-PRINT-THIS[' });
+        const invalidPattern = run(['--profile', profile]);
+        assert.equal(invalidPattern.status, 1);
+        assert.equal(invalidPattern.stdout, '');
+        assert.doesNotMatch(invalidPattern.stderr, /DO-NOT-PRINT-THIS/);
+        fs.writeFileSync(profile, ' '.repeat(16 * 1024 + 1));
+        assert.equal(run(['--profile', profile]).status, 1);
+    } finally {
+        fs.unlinkSync(profile);
+        fs.rmdirSync(temporary);
+    }
+});
+
 test('invalid options fail without printing any generated credential or template', () => {
     const cases = [
         ['unknown'], ['--count', '0'], ['--count', '1001'], ['--count', '1e2'],

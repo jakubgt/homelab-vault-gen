@@ -40,9 +40,9 @@ GitHub documents [release immutability](https://docs.github.com/en/code-security
 With GitHub CLI authenticated as `jakubgt`, Python 3, and Git available, build from that clean checkout:
 
 ```bash
-python -I scripts/build-release.py --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.4.0
-python -I scripts/verify-release.py --directory dist/v2.4.0 --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA
-python -I scripts/publish-release.py --version 2.4.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.4.0
+python -I scripts/build-release.py --version 2.5.0 --commit FULL_40_CHARACTER_COMMIT_SHA --output dist/v2.5.0
+python -I scripts/verify-release.py --directory dist/v2.5.0 --version 2.5.0 --commit FULL_40_CHARACTER_COMMIT_SHA
+python -I scripts/publish-release.py --version 2.5.0 --commit FULL_40_CHARACTER_COMMIT_SHA --artifacts dist/v2.5.0
 ```
 
 Replace the placeholder with the reviewed commit's full SHA. Use a separate output directory for each version; the publisher requires exactly that release's three files. `-I` isolates Python from local module shadowing and `PYTHONPATH`. The publisher refuses a dirty checkout, the wrong owner/repository, an unprotected or different current main commit, missing successful CI, missing tag controls, disabled release immutability, mismatched artifacts, or a tag pointing elsewhere. It reproduces the artifacts locally before uploading. It creates a draft, uploads the exact files, and publishes only after rechecking policy and identity. Published releases and existing tag targets are never overwritten. A matching interrupted owner-created draft can be resumed without clobbering conflicting assets.

@@ -5,7 +5,7 @@ umask 077
 
 REPO_URL="https://github.com/jakubgt/homelab-vault-gen.git"
 API_ROOT="https://api.github.com/repos/jakubgt/homelab-vault-gen"
-RELEASE_VERSION="2.4.0"
+RELEASE_VERSION="2.5.0"
 PINNED_INSTALLER_PROTOCOL=2
 WEB_ROOT="/srv/homelab-vault"
 SITE_PARENT="${WEB_ROOT%/*}"
